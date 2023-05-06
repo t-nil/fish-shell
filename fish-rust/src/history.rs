@@ -24,12 +24,12 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bitflags::bitflags;
-use cxx::{CxxWString, UniquePtr};
+use cxx::{CxxVector, CxxWString, UniquePtr};
 use widestring_suffix::widestrs;
 
 use crate::common::write_loop;
 use crate::env::{EnvDyn, EnvDynFFI, EnvStack, EnvStackRef, EnvStackRefFFI, Environment};
-use crate::ffi::{wcstring_list_ffi_t, Repin};
+use crate::ffi::{self, wcstring_list_ffi_t, Repin};
 use crate::flog::FLOGF;
 use crate::io::IoStreams;
 use crate::operation_context::OperationContext;
@@ -90,6 +90,7 @@ mod history_ffi {
     extern "Rust" {
         #[cxx_name = "history_save_all"]
         fn save_all();
+        #[cxx_name = "history_session_id"]
         fn rust_session_id(vars: &EnvDynFFI) -> UniquePtr<CxxWString>;
         fn rust_expand_and_detect_paths(
             paths: &wcstring_list_ffi_t,
@@ -104,6 +105,8 @@ mod history_ffi {
         #[rust_name = "in_private_mode_ffi"]
         fn in_private_mode(vars: &EnvDynFFI) -> bool;
         fn history_never_mmap() -> bool;
+        fn all_paths_are_valid_ffi(paths: &wcstring_list_ffi_t, ctx: &OperationContext<'_>)
+            -> bool;
     }
 
     extern "Rust" {
@@ -618,6 +621,10 @@ pub fn expand_and_detect_paths(paths: &[&wstr], vars: &dyn Environment) -> Vec<W
 /// Returns `true` if `paths` is empty or every path is valid.
 pub fn all_paths_are_valid(paths: &[WString], ctx: &OperationContext<'_>) -> bool {
     todo!()
+}
+
+fn all_paths_are_valid_ffi(paths: &ffi::wcstring_list_ffi_t, ctx: &OperationContext<'_>) -> bool {
+    all_paths_are_valid(&paths.from_ffi(), ctx)
 }
 
 /// Sets private mode on. Once in private mode, it cannot be turned off.

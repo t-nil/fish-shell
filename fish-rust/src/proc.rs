@@ -1735,11 +1735,16 @@ unsafe impl cxx::ExternType for JobGroupRefFfi {
 
 #[cxx::bridge]
 mod proc_ffi {
+    extern "C++" {
+        include!("parser.h");
+        type Parser = crate::parser::Parser;
+    }
     extern "Rust" {
         type JobRefFfi;
         type JobGroupRefFfi;
 
         fn new_job_group_ref() -> Box<JobGroupRefFfi>;
+        fn job_reap(parser: &Parser, allow_interactive: bool) -> bool;
     }
 }
 

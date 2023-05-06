@@ -1,3 +1,4 @@
+#if 0
 // The utility library for universal variables. Used both by the client library and by the daemon.
 #include "config.h"  // IWYU pragma: keep
 
@@ -6,7 +7,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 // We need the sys/file.h for the flock() declaration on Linux but not OS X.
-#include <sys/file.h>  // IWYU pragma: keep
+#include <sys/file.h>    // IWYU pragma: keep
 // We need the ioctl.h header so we can check if SIOCGIFHWADDR is defined by it so we know if we're
 // on a Linux system.
 #include <netinet/in.h>  // IWYU pragma: keep
@@ -1446,3 +1447,4 @@ var_table_ffi_t::var_table_ffi_t(const var_table_t &table) {
     }
 }
 var_table_ffi_t::~var_table_ffi_t() = default;
+#endif

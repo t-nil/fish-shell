@@ -22,7 +22,6 @@ include_cpp! {
     #include "common.h"
     #include "env.h"
     #include "env_dispatch.h"
-    #include "env_universal_common.h"
     #include "event.h"
     #include "fallback.h"
     #include "fds.h"
@@ -73,15 +72,7 @@ include_cpp! {
     generate!("wperror")
 
     generate_pod!("pipes_ffi_t")
-    generate!("environment_t")
     generate!("env_dispatch_var_change_ffi")
-    generate!("env_stack_t")
-    generate!("env_var_t")
-    generate!("env_universal_t")
-    generate!("env_universal_sync_result_t")
-    generate!("callback_data_t")
-    generate!("universal_notifier_t")
-    generate!("var_table_ffi_t")
 
     generate!("make_pipes_ffi")
 
@@ -95,9 +86,6 @@ include_cpp! {
     generate!("pretty_printer_t")
 
     generate!("fd_event_signaller_t")
-
-    generate!("env_var_t")
-    generate!("env_universal_t")
 
     generate!("colorize_shell")
     generate!("reader_status_count")
@@ -129,50 +117,48 @@ include_cpp! {
     generate!("builtin_ulimit_ffi")
 }
 
-unsafe impl Send for env_universal_t {}
+// impl environment_t {
+//     /// Helper to get a variable as a string, using the default flags.
+//     pub fn get_as_string(&self, name: &wstr) -> Option<WString> {
+//         self.get_as_string_flags(name, EnvMode::DEFAULT)
+//     }
 
-impl environment_t {
-    /// Helper to get a variable as a string, using the default flags.
-    pub fn get_as_string(&self, name: &wstr) -> Option<WString> {
-        self.get_as_string_flags(name, EnvMode::DEFAULT)
-    }
+//     /// Helper to get a variable as a string, using the given flags.
+//     pub fn get_as_string_flags(&self, name: &wstr, flags: EnvMode) -> Option<WString> {
+//         self.get_or_null(&name.to_ffi(), flags.bits())
+//             .as_ref()
+//             .map(|s| s.as_string().from_ffi())
+//     }
+// }
 
-    /// Helper to get a variable as a string, using the given flags.
-    pub fn get_as_string_flags(&self, name: &wstr, flags: EnvMode) -> Option<WString> {
-        self.get_or_null(&name.to_ffi(), flags.bits())
-            .as_ref()
-            .map(|s| s.as_string().from_ffi())
-    }
-}
+// impl env_stack_t {
+//     /// Helper to get a variable as a string, using the default flags.
+//     pub fn get_as_string(&self, name: &wstr) -> Option<WString> {
+//         self.get_as_string_flags(name, EnvMode::DEFAULT)
+//     }
 
-impl env_stack_t {
-    /// Helper to get a variable as a string, using the default flags.
-    pub fn get_as_string(&self, name: &wstr) -> Option<WString> {
-        self.get_as_string_flags(name, EnvMode::DEFAULT)
-    }
+//     /// Helper to get a variable as a string, using the given flags.
+//     pub fn get_as_string_flags(&self, name: &wstr, flags: EnvMode) -> Option<WString> {
+//         self.get_or_null(&name.to_ffi(), flags.bits())
+//             .as_ref()
+//             .map(|s| s.as_string().from_ffi())
+//     }
 
-    /// Helper to get a variable as a string, using the given flags.
-    pub fn get_as_string_flags(&self, name: &wstr, flags: EnvMode) -> Option<WString> {
-        self.get_or_null(&name.to_ffi(), flags.bits())
-            .as_ref()
-            .map(|s| s.as_string().from_ffi())
-    }
-
-    /// Helper to set a value.
-    pub fn set_var(&mut self, name: &wstr, value: &[WString], flags: EnvMode) -> libc::c_int {
-        use crate::wchar_ffi::{wstr_to_u32string, W0String};
-        let strings: Vec<W0String> = value.iter().map(wstr_to_u32string).collect();
-        let ptrs: Vec<*const u32> = strings.iter().map(|s| s.as_ptr()).collect();
-        self.pin()
-            .set_ffi(
-                &name.to_ffi(),
-                flags.bits(),
-                ptrs.as_ptr() as *const c_void,
-                ptrs.len(),
-            )
-            .into()
-    }
-}
+//     /// Helper to set a value.
+//     pub fn set_var(&mut self, name: &wstr, value: &[WString], flags: EnvMode) -> libc::c_int {
+//         use crate::wchar_ffi::{wstr_to_u32string, W0String};
+//         let strings: Vec<W0String> = value.iter().map(wstr_to_u32string).collect();
+//         let ptrs: Vec<*const u32> = strings.iter().map(|s| s.as_ptr()).collect();
+//         self.pin()
+//             .set_ffi(
+//                 &name.to_ffi(),
+//                 flags.bits(),
+//                 ptrs.as_ptr() as *const c_void,
+//                 ptrs.len(),
+//             )
+//             .into()
+//     }
+// }
 
 /// Allow wcharz_t to be "into" wstr.
 impl From<wcharz_t> for &wchar::wstr {
@@ -221,8 +207,6 @@ pub trait Repin {
 }
 
 // Implement Repin for our types.
-impl Repin for env_stack_t {}
-impl Repin for env_universal_t {}
 impl Repin for IoStreams<'_> {}
 impl Repin for Parser {}
 impl Repin for wcstring_list_ffi_t {}

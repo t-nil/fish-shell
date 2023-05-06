@@ -237,6 +237,14 @@ impl WCharFromFFI<Vec<WString>> for &wcstring_list_ffi_t {
     }
 }
 
+// /// Convert std::vector<wcstring> to Vec<WString>.
+// impl WCharFromFFI<Vec<WString>> for &cxx::CxxVector<cxx::CxxWString> {
+//     fn from_ffi(self) -> Vec<WString> {
+//         let count: usize = self.size();
+//         (0..count).map(|i| self.at(i).from_ffi()).collect()
+//     }
+// }
+
 /// Convert from the type we get back for C++ functions which return wcstring_list_ffi_t.
 impl<T> WCharFromFFI<Vec<WString>> for T
 where

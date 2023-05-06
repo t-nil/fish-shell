@@ -42,7 +42,6 @@ dir_remoteness_t path_get_data_remoteness();
 /// Like path_get_data_remoteness but for the config directory.
 dir_remoteness_t path_get_config_remoteness();
 
-class env_stack_t;
 /// Emit any errors if config directories are missing.
 /// Use the given environment stack to ensure this only occurs once.
 void path_emit_config_directory_messages(env_stack_t &vars);

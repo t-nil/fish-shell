@@ -11,7 +11,9 @@ use crate::wchar_ffi::WCharToFFI;
 use crate::wchar_ffi::{AsWstr, WCharFromFFI};
 use core::ffi::c_char;
 use cxx::{CxxVector, CxxWString, UniquePtr};
+use lazy_static::lazy_static;
 use std::pin::Pin;
+use std::sync::Arc;
 
 #[allow(clippy::module_inception)]
 #[cxx::bridge]
@@ -109,9 +111,19 @@ mod env_ffi {
     }
 
     extern "Rust" {
+        #[cxx_name = "EnvStack"]
+        type EnvStackFFI;
+    }
+
+    extern "Rust" {
         #[cxx_name = "EnvStackRef"]
         type EnvStackRefFFI;
+        fn env_stack_globals() -> &'static EnvStackRefFFI;
+        fn env_stack_principal() -> &'static EnvStackRefFFI;
+        fn set_one(&self, name: &CxxWString, flags: u16, value: &CxxWString) -> EnvStackSetResult;
+        fn get(&self, name: &CxxWString) -> *mut EnvVar;
         fn getf(&self, name: &CxxWString, mode: u16) -> *mut EnvVar;
+        fn get_unless_empty(&self, name: &CxxWString) -> *mut EnvVar;
         fn get_names(&self, flags: u16, out: Pin<&mut wcstring_list_ffi_t>);
         fn is_principal(&self) -> bool;
         fn get_last_statuses(&self) -> Box<Statuses>;
@@ -237,13 +249,50 @@ unsafe impl cxx::ExternType for EnvironmentRefFFI {
     type Kind = cxx::kind::Opaque;
 }
 
+/// FFI wrapper around EnvStack.
+pub struct EnvStackFFI(pub EnvStack);
+
+unsafe impl cxx::ExternType for EnvStackFFI {
+    type Id = cxx::type_id!("EnvStack"); // CXX name!
+    type Kind = cxx::kind::Opaque;
+}
+
 /// FFI wrapper around EnvStackRef.
 pub struct EnvStackRefFFI(pub EnvStackRef);
 
+lazy_static! {
+    static ref GLOBALS: EnvStackRefFFI = EnvStackRefFFI(Arc::clone(EnvStack::globals()));
+}
+lazy_static! {
+    static ref PRINCIPAL_STACK: EnvStackRefFFI = EnvStackRefFFI(Arc::clone(EnvStack::principal()));
+}
+
+fn env_stack_globals() -> &'static EnvStackRefFFI {
+    &GLOBALS
+}
+fn env_stack_principal() -> &'static EnvStackRefFFI {
+    &PRINCIPAL_STACK
+}
+
 impl EnvStackRefFFI {
+    fn set_one(&self, name: &CxxWString, flags: u16, value: &CxxWString) -> EnvStackSetResult {
+        self.0.set_one(
+            name.as_wstr(),
+            EnvMode::from_bits(flags).unwrap(),
+            value.from_ffi(),
+        )
+    }
+
+    fn get(&self, name: &CxxWString) -> *mut EnvVar {
+        EnvironmentFFI::getf_ffi(self.0.as_ref(), name, 0)
+    }
     fn getf(&self, name: &CxxWString, mode: u16) -> *mut EnvVar {
         EnvironmentFFI::getf_ffi(self.0.as_ref(), name, mode)
     }
+    fn get_unless_empty(&self, name: &CxxWString) -> *mut EnvVar {
+        EnvironmentFFI::getf_unless_empty_ffi(self.0.as_ref(), name, 0)
+    }
+
     fn get_names(&self, flags: u16, out: Pin<&mut wcstring_list_ffi_t>) {
         EnvironmentFFI::get_names_ffi(self.0.as_ref(), flags, out)
     }
@@ -355,6 +404,21 @@ trait EnvironmentFFI: Environment {
         ) {
             None => std::ptr::null_mut(),
             Some(var) => Box::into_raw(Box::new(var)),
+        }
+    }
+    fn getf_unless_empty_ffi(&self, name: &CxxWString, mode: u16) -> *mut EnvVar {
+        match self.getf(
+            name.as_wstr(),
+            EnvMode::from_bits(mode).expect("Invalid mode bits"),
+        ) {
+            None => std::ptr::null_mut(),
+            Some(var) => {
+                if var.is_empty() {
+                    std::ptr::null_mut()
+                } else {
+                    Box::into_raw(Box::new(var))
+                }
+            }
         }
     }
     fn get_names_ffi(&self, mode: u16, mut out: Pin<&mut wcstring_list_ffi_t>) {

@@ -10,7 +10,7 @@
 
 bool no_cancel() { return false; }
 
-operation_context_t::operation_context_t(std::shared_ptr<parser_t> parser,
+operation_context_t::operation_context_t(ParserRef parser,
                                          const environment_t &vars, cancel_checker_t cancel_checker,
                                          size_t expansion_limit)
     : parser(std::move(parser)),
@@ -23,8 +23,8 @@ operation_context_t operation_context_t::empty() {
     return operation_context_t{nullenv};
 }
 
-operation_context_t operation_context_t::globals() {
-    return operation_context_t{env_stack_t::globals()};
+operation_context_t operation_context_globals() {
+    return operation_context_t{env_stack_globals()};
 }
 
 operation_context_t::~operation_context_t() = default;

@@ -1852,7 +1852,7 @@ bool complete_load(const wcstring &cmd, parser_t &parser) {
     // it.
     // Note we only look at the global fish_function_path and fish_complete_path.
     maybe_t<wcstring> path_to_load =
-        completion_autoloader.acquire()->resolve_command(cmd, env_stack_t::globals());
+        completion_autoloader.acquire()->resolve_command(cmd, env_stack_globals());
     if (path_to_load) {
         autoload_t::perform_autoload(*path_to_load, parser);
         completion_autoloader.acquire()->mark_autoload_finished(cmd);

@@ -115,20 +115,21 @@ impl EnvUniversal {
         self.vars.get(name).map(|var| var.get_flags())
     }
     // Sets a variable.
-    pub fn set(&mut self, key: &wstr, var: &EnvVar) {
+    pub fn set(&mut self, key: &wstr, var: EnvVar) {
+        let exports = var.exports();
         match self.vars.entry(key.to_owned()) {
             Entry::Occupied(mut entry) => {
-                if entry.get() == var {
+                if entry.get() == &var {
                     return;
                 }
-                entry.insert(var.clone());
+                entry.insert(var);
             }
             Entry::Vacant(mut entry) => {
-                entry.insert(var.clone());
+                entry.insert(var);
             }
         };
         self.modified.insert(key.to_owned());
-        if var.exports() {
+        if exports {
             self.export_generation += 1;
         }
     }
@@ -340,7 +341,7 @@ fn resolve_default_strategy() -> NotifierStrategy {
 }
 
 // Default instance. Other instances are possible for testing.
-fn default_notifier() -> &'static dyn UniversalNotifier {
+pub fn default_notifier() -> &'static dyn UniversalNotifier {
     todo!()
 }
 
@@ -351,4 +352,9 @@ fn new_notifier_for_strategy(strat: NotifierStrategy, test_path: Option<&wstr>) 
 
 pub fn get_runtime_path() -> WString {
     todo!()
+}
+
+#[cxx::bridge]
+mod env_universal_common_ffi {
+    extern "Rust" {}
 }

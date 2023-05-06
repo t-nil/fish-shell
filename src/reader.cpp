@@ -706,7 +706,7 @@ class reader_data_t : public std::enable_shared_from_this<reader_data_t> {
     /// Configuration for the reader.
     reader_config_t conf;
     /// The parser being used.
-    std::shared_ptr<parser_t> parser_ref;
+    ParserRef parser_ref;
     /// String containing the whole current commandline.
     editable_line_t command_line;
     /// Whether the most recent modification to the command line was done by either history search
@@ -837,7 +837,6 @@ class reader_data_t : public std::enable_shared_from_this<reader_data_t> {
     void paint_layout(const wchar_t *reason);
 
     /// Return the variable set used for e.g. command duration.
-    env_stack_t &vars() { return parser_ref->vars(); }
     const env_stack_t &vars() const { return parser_ref->vars(); }
 
     /// Access the parser.
@@ -845,9 +844,9 @@ class reader_data_t : public std::enable_shared_from_this<reader_data_t> {
     const parser_t &parser() const { return *parser_ref; }
 
     /// Convenience cover over exec_count().
-    uint64_t exec_count() const { return parser().libdata().exec_count; }
+    uint64_t exec_count() const { return parser().libdata().exec_count(); }
 
-    reader_data_t(std::shared_ptr<parser_t> parser, HistorySharedPtr &hist, reader_config_t &&conf)
+    reader_data_t(ParserRef parser, HistorySharedPtr &hist, reader_config_t &&conf)
         : conf(std::move(conf)),
           parser_ref(std::move(parser)),
           inputter(*parser_ref, conf.in),
@@ -886,7 +885,7 @@ class reader_data_t : public std::enable_shared_from_this<reader_data_t> {
 
     /// Given that the user is tab-completing a token \p wc whose cursor is at \p pos in the token,
     /// try expanding it as a wildcard, populating \p result with the expanded string.
-    expand_result_t::result_t try_expand_wildcard(wcstring wc, size_t pos, wcstring *result);
+    ExpandResultCode try_expand_wildcard(wcstring wc, size_t pos, wcstring *result);
 
     void move_word(editable_line_t *el, bool move_right, bool erase, move_word_style_t style,
                    bool newv);
@@ -3082,8 +3081,8 @@ void reader_data_t::apply_commandline_state_changes() {
     }
 }
 
-expand_result_t::result_t reader_data_t::try_expand_wildcard(wcstring wc, size_t position,
-                                                             wcstring *result) {
+ExpandResultCode reader_data_t::try_expand_wildcard(wcstring wc, size_t position,
+                                                    wcstring *result) {
     // Hacky from #8593: only expand if there are wildcards in the "current path component."
     // Find the "current path component" by looking for an unescaped slash before and after
     // our position.
@@ -3100,7 +3099,7 @@ expand_result_t::result_t reader_data_t::try_expand_wildcard(wcstring wc, size_t
         comp_end++;
     }
     if (!wildcard_has(wc.c_str() + comp_start, comp_end - comp_start)) {
-        return expand_result_t::wildcard_no_match;
+        return ExpandResultCode::wildcard_no_match;
     }
 
     result->clear();
@@ -3113,7 +3112,7 @@ expand_result_t::result_t reader_data_t::try_expand_wildcard(wcstring wc, size_t
                          expand_flag::preserve_home_tildes};
     completion_list_t expanded;
     expand_result_t ret = expand_string(std::move(wc), &expanded, flags, ctx);
-    if (ret != expand_result_t::ok) return ret.result;
+    if (ret.result != ExpandResultCode::ok) return ret.result;
 
     // Insert all matches (escaped) and a trailing space.
     wcstring joined;
@@ -3129,7 +3128,7 @@ expand_result_t::result_t reader_data_t::try_expand_wildcard(wcstring wc, size_t
     }
 
     *result = std::move(joined);
-    return expand_result_t::ok;
+    return ExpandResultCode::ok;
 }
 
 void reader_data_t::compute_and_apply_completions(readline_cmd_t c, readline_loop_state_t &rls) {
@@ -3169,17 +3168,17 @@ void reader_data_t::compute_and_apply_completions(readline_cmd_t c, readline_loo
     wcstring wc_expanded;
     switch (
         try_expand_wildcard(wcstring(token_begin, token_end), position_in_token, &wc_expanded)) {
-        case expand_result_t::error:
+        case ExpandResultCode::error:
             // This may come about if we exceeded the max number of matches.
             // Return "success" to suppress normal completions.
             flash();
             return;
-        case expand_result_t::wildcard_no_match:
+        case ExpandResultCode::wildcard_no_match:
             break;
-        case expand_result_t::cancel:
+        case ExpandResultCode::cancel:
             // e.g. the user hit control-C. Suppress normal completions.
             return;
-        case expand_result_t::ok:
+        case ExpandResultCode::ok:
             rls.comp.clear();
             rls.complete_did_insert = false;
             size_t tok_off = static_cast<size_t>(token_begin - buff);

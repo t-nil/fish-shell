@@ -1,6 +1,6 @@
 // Support for exposing the terminal size.
 use crate::common::assert_sync;
-use crate::env::{EnvMode, EnvVar, Environment};
+use crate::env::{EnvDynFFI, EnvMode, EnvStackRefFFI, EnvVar, Environment};
 use crate::flog::FLOG;
 use crate::parser::Parser;
 use crate::wchar::{WString, L};
@@ -22,11 +22,21 @@ mod termsize_ffi {
         pub height: isize,
     }
 
+    extern "C++" {
+        include!("env.h");
+        include!("parser.h");
+        #[cxx_name = "EnvStackRef"]
+        type EnvStackRefFFI = crate::env::EnvStackRefFFI;
+        type Parser = crate::parser::Parser;
+    }
+
     extern "Rust" {
         pub fn termsize_default() -> Termsize;
         pub fn termsize_last() -> Termsize;
         pub fn termsize_initialize_ffi(vars: *const u8) -> Termsize;
+        fn handle_columns_lines_var_change_ffi(vars: &EnvStackRefFFI);
         pub fn termsize_invalidate_tty();
+        fn termsize_update(parser: &Parser) -> Termsize;
         pub fn termsize_handle_winch();
     }
 }
@@ -269,6 +279,16 @@ pub fn termsize_last() -> Termsize {
     return SHARED_CONTAINER.last();
 }
 
+/// Called when the COLUMNS or LINES variables are changed.
+/// The pointer is to an environment_t, but has the wrong type to satisfy cxx.
+pub fn handle_columns_lines_var_change(vars: &dyn Environment) {
+    SHARED_CONTAINER.handle_columns_lines_var_change(vars);
+}
+
+pub fn handle_columns_lines_var_change_ffi(vars: &EnvStackRefFFI) {
+    handle_columns_lines_var_change(&*vars.0);
+}
+
 /// Called to initialize the termsize.
 pub fn termsize_initialize(vars: &dyn Environment) -> Termsize {
     todo!()
@@ -279,6 +299,10 @@ pub fn termsize_initialize(vars: &dyn Environment) -> Termsize {
 pub fn termsize_initialize_ffi(vars_ptr: *const u8) -> Termsize {
     todo!()
     // SHARED_CONTAINER.initialize(vars)
+}
+
+fn termsize_update(parser: &Parser) -> Termsize {
+    SHARED_CONTAINER.updating(parser)
 }
 
 /// FFI bridge for WINCH.

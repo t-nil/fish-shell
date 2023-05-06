@@ -14,6 +14,7 @@ pub const NONPATH_ARRAY_SEP: char = ' ';
 bitflags! {
     /// Flags that may be passed as the 'mode' in env_stack_t::set() / environment_t::get().
     #[repr(C)]
+    #[derive(Default)]
     pub struct EnvMode: u16 {
         /// Default mode. Used with `env_stack_t::get()` to indicate the caller doesn't care what scope
         /// the var is in or whether it is exported or unexported.

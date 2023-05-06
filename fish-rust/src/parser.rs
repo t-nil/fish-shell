@@ -9,13 +9,15 @@ use crate::common::{
 use crate::complete::CompletionList;
 use crate::env::status::ENV_OK;
 use crate::env::{
-    EnvDynFFI, EnvMode, EnvStack, EnvStackRef, EnvStackSetResult, Environment, Statuses,
+    EnvDynFFI, EnvMode, EnvStack, EnvStackRef, EnvStackRefFFI, EnvStackSetResult, Environment,
+    Statuses,
 };
 use crate::event::{self, Event};
 use crate::expand::{
     expand_string, replace_home_directory_with_tilde, ExpandFlags, ExpandResultCode,
 };
 use crate::fds::{open_cloexec, AutoCloseFd};
+use crate::ffi;
 use crate::flog::FLOGF;
 use crate::function::function_get_props;
 use crate::global_safety::{RelaxedAtomicBool, SharedFromThis, SharedFromThisBase};
@@ -34,9 +36,14 @@ use crate::threads::assert_is_main_thread;
 use crate::util::get_time;
 use crate::wait_handle::WaitHandleStore;
 use crate::wchar::{wstr, WString, L};
+use crate::wchar_ffi::{AsWstr, WCharFromFFI};
 use crate::wutil::{perror, wgettext, wgettext_fmt};
-use cxx::{CxxWString, UniquePtr};
-use libc::c_int;
+use cxx::{CxxVector, CxxWString, UniquePtr};
+use libc::{c_int, F_SEAL_FUTURE_WRITE};
+use libc::{pselect, O_RDONLY, STDERR_FILENO};
+use once_cell::sync::Lazy;
+pub use parser_ffi::{library_data_pod_t, BlockType, LoopStatus};
+use printf_compat::sprintf;
 use std::cell::{Ref, RefCell, RefMut};
 use std::ffi::CStr;
 use std::os::fd::{AsRawFd, RawFd};
@@ -316,6 +323,7 @@ pub struct Parser {
 
     /// Set of variables for the parser.
     pub variables: EnvStackRef,
+    variables_ffi: EnvStackRefFFI,
 
     /// Miscellaneous library data.
     library_data: RefCell<LibraryData>,
@@ -343,6 +351,7 @@ impl SharedFromThis<Parser> for Parser {
 impl Parser {
     /// Create a parser
     pub fn new(variables: EnvStackRef, is_principal: bool) -> ParserRef {
+        let variables_ffi = EnvStackRefFFI(Arc::clone(&variables));
         let mut result = Arc::new(Self {
             base: SharedFromThisBase::new(),
             execution_context: RefCell::new(None),
@@ -351,6 +360,7 @@ impl Parser {
             block_list: RefCell::new(vec![]),
             eval_level: AtomicIsize::new(-1),
             variables,
+            variables_ffi,
             library_data: RefCell::new(LibraryData::new()),
             syncs_uvars: RelaxedAtomicBool::new(false),
             is_principal: RelaxedAtomicBool::new(is_principal),
@@ -1065,201 +1075,6 @@ impl Parser {
     }
 }
 
-use libc::{pselect, O_RDONLY, STDERR_FILENO};
-use once_cell::sync::Lazy;
-pub use parser_ffi::{library_data_pod_t, BlockType, LoopStatus};
-use printf_compat::sprintf;
-
-#[cxx::bridge]
-mod parser_ffi {
-    /// Types of blocks.
-    #[cxx_name = "block_type_t"]
-    pub enum BlockType {
-        /// While loop block
-        while_block,
-        /// For loop block
-        for_block,
-        /// If block
-        if_block,
-        /// Function invocation block
-        function_call,
-        /// Function invocation block with no variable shadowing
-        function_call_no_shadow,
-        /// Switch block
-        switch_block,
-        /// Command substitution scope
-        subst,
-        /// Outermost block
-        top,
-        /// Unconditional block
-        begin,
-        /// Block created by the . (source) builtin
-        source,
-        /// Block created on event notifier invocation
-        event,
-        /// Breakpoint block
-        breakpoint,
-        /// Variable assignment before a command
-        variable_assignment,
-    }
-
-    /// Possible states for a loop.
-    pub enum LoopStatus {
-        /// current loop block executed as normal
-        normals,
-        /// current loop block should be removed
-        breaks,
-        /// current loop block should be skipped
-        continues,
-    }
-
-    /// Plain-Old-Data components of `struct library_data_t` that can be shared over FFI
-    #[derive(Default)]
-    pub struct library_data_pod_t {
-        /// A counter incremented every time a command executes.
-        pub exec_count: u64,
-
-        /// A counter incremented every time a command produces a $status.
-        pub status_count: u64,
-
-        /// Last reader run count.
-        pub last_exec_run_counter: u64,
-
-        /// Number of recursive calls to the internal completion function.
-        pub complete_recursion_level: u32,
-
-        /// If set, we are currently within fish's initialization routines.
-        pub within_fish_init: bool,
-
-        /// If we're currently repainting the commandline.
-        /// Useful to stop infinite loops.
-        pub is_repaint: bool,
-
-        /// Whether we called builtin_complete -C without parameter.
-        pub builtin_complete_current_commandline: bool,
-
-        /// Whether we are currently cleaning processes.
-        pub is_cleaning_procs: bool,
-
-        /// The internal job id of the job being populated, or 0 if none.
-        /// This supports the '--on-job-exit caller' feature.
-        pub caller_id: u64, // TODO should be InternalJobId
-
-        /// Whether we are running a subshell command.
-        pub is_subshell: bool,
-
-        /// Whether we are running an event handler. This is not a bool because we keep count of the
-        /// event nesting level.
-        pub is_event: i32,
-
-        /// Whether we are currently interactive.
-        pub is_interactive: bool,
-
-        /// Whether to suppress fish_trace output. This occurs in the prompt, event handlers, and key
-        /// bindings.
-        pub suppress_fish_trace: bool,
-
-        /// Whether we should break or continue the current loop.
-        /// This is set by the 'break' and 'continue' commands.
-        pub loop_status: LoopStatus,
-
-        /// Whether we should return from the current function.
-        /// This is set by the 'return' command.
-        pub returning: bool,
-
-        /// Whether we should stop executing.
-        /// This is set by the 'exit' command, and unset after 'reader_read'.
-        /// Note this only exits up to the "current script boundary." That is, a call to exit within a
-        /// 'source' or 'read' command will only exit up to that command.
-        pub exit_current_script: bool,
-
-        /// The read limit to apply to captured subshell output, or 0 for none.
-        pub read_limit: usize,
-    }
-
-    extern "C++" {
-        include!("env.h");
-        include!("io.h");
-        include!("proc.h");
-        include!("parse_tree.h");
-        type IoChain = crate::io::IoChain;
-        type JobRefFfi = crate::proc::JobRefFfi;
-        type JobGroupRefFfi = crate::proc::JobGroupRefFfi;
-        type ParsedSourceRefFFI = crate::parse_tree::ParsedSourceRefFFI;
-        // type EnvDyn = crate::env::EnvDynFFI;
-    }
-    extern "Rust" {
-        type Block;
-        type JobListFfi;
-    }
-    extern "Rust" {
-        type Parser;
-
-        fn assert_can_execute(&self);
-
-        fn ffi_eval_with(
-            &mut self,
-            cmd: &CxxWString,
-            io: &IoChain,
-            job_group: *const JobGroupRefFfi,
-            block_type: BlockType,
-        ) -> i32;
-        fn ffi_eval_parsed_source(&mut self, ps: &ParsedSourceRefFFI, io: &IoChain);
-        fn ffi_current_line(&mut self) -> UniquePtr<CxxWString>;
-        fn ffi_get_lineno(&mut self) -> i32;
-        fn ffi_is_block(&self) -> bool;
-        fn ffi_is_breakpoint(&self) -> bool;
-        fn ffi_blocks(&self) -> Vec<Block>;
-        fn ffi_jobs(&self) -> Box<JobListFfi>;
-        // fn ffi_vars(&self) -> Box<EnvDyn>;
-    }
-}
-
-unsafe impl cxx::ExternType for Parser {
-    type Id = cxx::type_id!("Parser");
-    type Kind = cxx::kind::Opaque;
-}
-
-pub struct JobListFfi(pub JobList);
-
-impl Parser {
-    fn ffi_eval_with(
-        &mut self,
-        cmd: &CxxWString,
-        io: &IoChain,
-        job_group: *const JobGroupRefFfi,
-        block_type: BlockType,
-    ) -> i32 {
-        todo!()
-    }
-    fn ffi_eval_parsed_source(&mut self, ps: &ParsedSourceRefFFI, io: &IoChain) {
-        todo!()
-    }
-    fn ffi_current_line(&mut self) -> UniquePtr<CxxWString> {
-        todo!()
-    }
-    fn ffi_get_lineno(&mut self) -> i32 {
-        todo!()
-    }
-    fn ffi_is_block(&self) -> bool {
-        todo!()
-    }
-    fn ffi_is_breakpoint(&self) -> bool {
-        todo!()
-    }
-    fn ffi_blocks(&self) -> Vec<Block> {
-        todo!()
-    }
-    fn ffi_jobs(&self) -> Box<JobListFfi> {
-        todo!()
-    }
-    // fn ffi_vars(&self) -> Box<EnvDynFFI> {
-    //     todo!()
-    //     // Box::new(EnvDynFFI(self.vars().snapshot()))
-    // }
-    // fn ffi_context(&self) ->
-}
-
 // Given a file path, return something nicer. Currently we just "unexpand" tildes.
 fn user_presentable_path(path: &wstr, vars: &dyn Environment) -> WString {
     replace_home_directory_with_tilde(path, vars)
@@ -1377,4 +1192,257 @@ fn append_block_description_to_stack_trace(parser: &Parser, b: &Block, trace: &m
 
 pub fn lineno_or_minus_1(lineno: Option<usize>) -> isize {
     lineno.map_or(-1, |l| l.try_into().unwrap())
+}
+
+#[cxx::bridge]
+mod parser_ffi {
+    /// Types of blocks.
+    #[cxx_name = "block_type_t"]
+    pub enum BlockType {
+        /// While loop block
+        while_block,
+        /// For loop block
+        for_block,
+        /// If block
+        if_block,
+        /// Function invocation block
+        function_call,
+        /// Function invocation block with no variable shadowing
+        function_call_no_shadow,
+        /// Switch block
+        switch_block,
+        /// Command substitution scope
+        subst,
+        /// Outermost block
+        top,
+        /// Unconditional block
+        begin,
+        /// Block created by the . (source) builtin
+        source,
+        /// Block created on event notifier invocation
+        event,
+        /// Breakpoint block
+        breakpoint,
+        /// Variable assignment before a command
+        variable_assignment,
+    }
+
+    /// Possible states for a loop.
+    pub enum LoopStatus {
+        /// current loop block executed as normal
+        normals,
+        /// current loop block should be removed
+        breaks,
+        /// current loop block should be skipped
+        continues,
+    }
+
+    /// Plain-Old-Data components of `struct library_data_t` that can be shared over FFI
+    #[derive(Default)]
+    pub struct library_data_pod_t {
+        /// A counter incremented every time a command executes.
+        pub exec_count: u64,
+
+        /// A counter incremented every time a command produces a $status.
+        pub status_count: u64,
+
+        /// Last reader run count.
+        pub last_exec_run_counter: u64,
+
+        /// Number of recursive calls to the internal completion function.
+        pub complete_recursion_level: u32,
+
+        /// If set, we are currently within fish's initialization routines.
+        pub within_fish_init: bool,
+
+        /// If we're currently repainting the commandline.
+        /// Useful to stop infinite loops.
+        pub is_repaint: bool,
+
+        /// Whether we called builtin_complete -C without parameter.
+        pub builtin_complete_current_commandline: bool,
+
+        /// Whether we are currently cleaning processes.
+        pub is_cleaning_procs: bool,
+
+        /// The internal job id of the job being populated, or 0 if none.
+        /// This supports the '--on-job-exit caller' feature.
+        pub caller_id: u64, // TODO should be InternalJobId
+
+        /// Whether we are running a subshell command.
+        pub is_subshell: bool,
+
+        /// Whether we are running an event handler. This is not a bool because we keep count of the
+        /// event nesting level.
+        pub is_event: i32,
+
+        /// Whether we are currently interactive.
+        pub is_interactive: bool,
+
+        /// Whether to suppress fish_trace output. This occurs in the prompt, event handlers, and key
+        /// bindings.
+        pub suppress_fish_trace: bool,
+
+        /// Whether we should break or continue the current loop.
+        /// This is set by the 'break' and 'continue' commands.
+        pub loop_status: LoopStatus,
+
+        /// Whether we should return from the current function.
+        /// This is set by the 'return' command.
+        pub returning: bool,
+
+        /// Whether we should stop executing.
+        /// This is set by the 'exit' command, and unset after 'reader_read'.
+        /// Note this only exits up to the "current script boundary." That is, a call to exit within a
+        /// 'source' or 'read' command will only exit up to that command.
+        pub exit_current_script: bool,
+
+        /// The read limit to apply to captured subshell output, or 0 for none.
+        pub read_limit: usize,
+    }
+
+    extern "C++" {
+        include!("wutil.h");
+        include!("env.h");
+        include!("io.h");
+        include!("proc.h");
+        include!("parse_tree.h");
+        type IoChain = crate::io::IoChain;
+        type JobRefFfi = crate::proc::JobRefFfi;
+        type JobGroupRefFfi = crate::proc::JobGroupRefFfi;
+        type ParsedSourceRefFFI = crate::parse_tree::ParsedSourceRefFFI;
+        #[cxx_name = "EnvStackRef"]
+        type EnvStackRefFFI = crate::env::EnvStackRefFFI;
+        #[cxx_name = "env_stack_set_result_t"]
+        type EnvStackSetResult = crate::env::EnvStackSetResult;
+        type wcstring_list_ffi_t = crate::ffi::wcstring_list_ffi_t;
+    }
+    extern "Rust" {
+        type Block;
+        type JobListFfi;
+    }
+    extern "Rust" {
+        type LibraryData;
+        fn exec_count(&self) -> u64;
+    }
+    extern "Rust" {
+        #[cxx_name = "ParserRef"]
+        type ParserRefFFI;
+    }
+    extern "Rust" {
+        type Parser;
+
+        fn assert_can_execute(&self);
+
+        #[cxx_name = "eval_with"]
+        fn ffi_eval_with(
+            &mut self,
+            cmd: &CxxWString,
+            io: &IoChain,
+            job_group: *const JobGroupRefFfi,
+            block_type: BlockType,
+        ) -> i32;
+        #[cxx_name = "eval_parsed_source"]
+        fn ffi_eval_parsed_source(&mut self, ps: &ParsedSourceRefFFI, io: &IoChain);
+        #[cxx_name = "current_line"]
+        fn ffi_current_line(&mut self) -> UniquePtr<CxxWString>;
+        #[cxx_name = "get_lineno"]
+        fn ffi_get_lineno(&mut self) -> i32;
+        #[cxx_name = "is_block"]
+        fn ffi_is_block(&self) -> bool;
+        #[cxx_name = "is_breakpoint"]
+        fn ffi_is_breakpoint(&self) -> bool;
+        #[cxx_name = "blocks"]
+        fn ffi_blocks(&self) -> Vec<Block>;
+        #[cxx_name = "jobs"]
+        fn ffi_jobs(&self) -> Box<JobListFfi>;
+        #[cxx_name = "libdata"]
+        fn ffi_libdata(&self) -> &LibraryData;
+        #[cxx_name = "vars"]
+        fn ffi_vars(&self) -> &EnvStackRefFFI;
+        fn sync_uvars_and_fire(&self, always: bool);
+        #[cxx_name = "shared"]
+        fn ffi_shared(&self) -> Box<ParserRefFFI>;
+        #[cxx_name = "set_var_and_fire"]
+        fn ffi_set_var_and_fire(
+            &self,
+            key: &CxxWString,
+            mode: u16,
+            vals: &wcstring_list_ffi_t,
+        ) -> EnvStackSetResult;
+    }
+}
+
+impl LibraryData {
+    fn exec_count(&self) -> u64 {
+        self.pods.exec_count
+    }
+}
+
+unsafe impl cxx::ExternType for Parser {
+    type Id = cxx::type_id!("Parser");
+    type Kind = cxx::kind::Opaque;
+}
+
+pub struct ParserRefFFI(pub ParserRef);
+
+unsafe impl cxx::ExternType for ParserRefFFI {
+    type Id = cxx::type_id!("ParserRef"); // CXX name!
+    type Kind = cxx::kind::Opaque;
+}
+
+pub struct JobListFfi(pub JobList);
+
+impl Parser {
+    fn ffi_shared(&self) -> Box<ParserRefFFI> {
+        Box::new(ParserRefFFI(self.shared()))
+    }
+    fn ffi_set_var_and_fire(
+        &self,
+        key: &CxxWString,
+        mode: u16,
+        vals: &ffi::wcstring_list_ffi_t,
+    ) -> EnvStackSetResult {
+        self.set_var_and_fire(
+            key.as_wstr(),
+            EnvMode::from_bits(mode).unwrap(),
+            vals.from_ffi(),
+        )
+    }
+    fn ffi_eval_with(
+        &mut self,
+        cmd: &CxxWString,
+        io: &IoChain,
+        job_group: *const JobGroupRefFfi,
+        block_type: BlockType,
+    ) -> i32 {
+        todo!()
+    }
+    fn ffi_eval_parsed_source(&mut self, ps: &ParsedSourceRefFFI, io: &IoChain) {
+        todo!()
+    }
+    fn ffi_current_line(&mut self) -> UniquePtr<CxxWString> {
+        todo!()
+    }
+    fn ffi_get_lineno(&mut self) -> i32 {
+        todo!()
+    }
+    fn ffi_is_block(&self) -> bool {
+        todo!()
+    }
+    fn ffi_is_breakpoint(&self) -> bool {
+        todo!()
+    }
+    fn ffi_blocks(&self) -> Vec<Block> {
+        todo!()
+    }
+    fn ffi_jobs(&self) -> Box<JobListFfi> {
+        todo!()
+    }
+    fn ffi_vars(&self) -> &EnvStackRefFFI {
+        &self.variables_ffi
+    }
+    fn ffi_libdata(&self) -> &LibraryData {
+        unsafe { self.library_data.try_borrow_unguarded() }.unwrap()
+    }
 }

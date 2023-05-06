@@ -1,5 +1,7 @@
 use crate::common::CancelChecker;
-use crate::env::{EnvNull, EnvStack, EnvStackRef, Environment, EnvironmentRef, EnvironmentRefFFI};
+use crate::env::{
+    EnvNull, EnvStack, EnvStackRef, EnvStackRefFFI, Environment, EnvironmentRef, EnvironmentRefFFI,
+};
 use crate::parser::{Parser, ParserRef};
 use crate::proc::JobGroupRef;
 use once_cell::sync::Lazy;
@@ -28,6 +30,8 @@ pub struct OperationContext<'a> {
     // todo! This should be an Arc<dyn Environment> but I'm not sure how to convert from
     // Arc<EnvStackRef>.
     pub vars: EnvStackRef,
+
+    vars_ffi: EnvStackRefFFI,
 
     // The limit in the number of expansions which should be produced.
     pub expansion_limit: usize,
@@ -64,9 +68,11 @@ impl<'a> OperationContext<'a> {
         expansion_limit: usize,
     ) -> OperationContext<'a> {
         let vars = Arc::clone(&parser.variables);
+        let vars_ffi = EnvStackRefFFI(Arc::clone(&vars));
         OperationContext {
             parser: Some(parser),
             vars,
+            vars_ffi,
             expansion_limit,
             job_group: None,
             cancel_checker,
@@ -75,9 +81,11 @@ impl<'a> OperationContext<'a> {
 
     /// Construct from vars alone.
     pub fn new(vars: EnvStackRef, expansion_limit: usize) -> OperationContext<'a> {
+        let vars_ffi = EnvStackRefFFI(Arc::clone(&vars));
         OperationContext {
             parser: None,
             vars,
+            vars_ffi,
             expansion_limit,
             job_group: None,
             cancel_checker: &no_cancel,
@@ -100,14 +108,15 @@ impl<'a> OperationContext<'a> {
 mod operation_context_ffi {
     extern "C++" {
         include!("env.h");
-        #[cxx_name = "EnvironmentRef"]
-        type EnvironmentRefFFI = crate::env::EnvironmentRefFFI;
+        #[cxx_name = "EnvStackRef"]
+        type EnvStackRefFFI = crate::env::EnvStackRefFFI;
     }
     extern "Rust" {
         type OperationContext<'a>;
 
+        fn empty_operation_context() -> Box<OperationContext<'static>>;
         fn check_cancel(&self) -> bool;
-        // fn vars(&self) -> &EnvironmentRefFFI;
+        unsafe fn vars<'a, 'b>(&'b self) -> &'b EnvStackRefFFI;
     }
 }
 
@@ -117,8 +126,11 @@ unsafe impl cxx::ExternType for OperationContext<'_> {
 }
 
 impl OperationContext<'_> {
-    fn vars(&self) -> &EnvironmentRefFFI {
-        todo!()
-        // Box::new(EnvironmentRefFFI(Arc::clone(&self.vars)))
+    fn vars<'a, 'b>(&'b self) -> &'b EnvStackRefFFI {
+        &self.vars_ffi
     }
+}
+
+fn empty_operation_context() -> Box<OperationContext<'static>> {
+    Box::new(OperationContext::empty())
 }

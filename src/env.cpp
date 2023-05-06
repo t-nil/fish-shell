@@ -217,7 +217,7 @@ void misc_init() {
 
 /// Make sure the PATH variable contains something.
 static void setup_path() {
-    auto &vars = env_stack_t::globals();
+    auto &vars = env_stack_globals();
     const auto path = vars.get_unless_empty(L"PATH");
     if (!path) {
 #if defined(_CS_PATH)
@@ -241,7 +241,7 @@ static std::map<wcstring, wcstring> inheriteds;
 const std::map<wcstring, wcstring> &env_get_inherited() { return inheriteds; }
 
 void env_init(const struct config_paths_t *paths, bool do_uvars, bool default_paths) {
-    env_stack_t &vars = env_stack_t::principal();
+    env_stack_t &vars = env_stack_principal();
     // Import environment variables. Walk backwards so that the first one out of any duplicates wins
     // (See issue #2784).
     wcstring key, val;
@@ -495,7 +495,7 @@ void env_stack_t::push(bool new_scope) { impl_->push(new_scope); }
 
 void env_stack_t::pop() { impl_->pop(); }
 
-env_stack_t &env_stack_t::globals() {
+env_stack_t &env_stack_globals() {
     static env_stack_t s_globals(env_get_globals_ffi());
     return s_globals;
 }

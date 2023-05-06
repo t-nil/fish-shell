@@ -1,9 +1,14 @@
 use crate::ast::{
-    Argument, Ast, BlockStatement, BlockStatementHeaderVariant, DecoratedStatement, Keyword, Node,
-    NodeFfi, NodeVisitor, Redirection, Token, Type, VariableAssignment,
+    self, Argument, Ast, BlockStatement, BlockStatementHeaderVariant, DecoratedStatement, Keyword,
+    Node, NodeFfi, NodeVisitor, Redirection, Token, Type, VariableAssignment,
 };
+use crate::expand::{expand_to_command_and_args, ExpandResultCode};
 use crate::ffi::highlighter_t;
+use crate::operation_context::OperationContext;
 use crate::parse_constants::ParseTokenType;
+use crate::wchar::{wstr, WString};
+use crate::wchar_ffi::{AsWstr, WCharFromFFI, WCharToFFI};
+use cxx::{CxxWString, UniquePtr};
 use std::pin::Pin;
 
 struct Highlighter<'a> {
@@ -104,6 +109,35 @@ impl<'a> NodeVisitor<'a> for Highlighter<'a> {
     }
 }
 
+// Given a plain statement node in a parse tree, get the command and return it, expanded
+// appropriately for commands. If we succeed, return true.
+fn statement_get_expanded_command(
+    src: &wstr,
+    stmt: &ast::DecoratedStatement,
+    ctx: &OperationContext<'_>,
+    out_cmd: &mut WString,
+) -> bool {
+    // Get the command. Try expanding it. If we cannot, it's an error.
+    let Some(cmd) = stmt.command.try_source(src) else {
+        return false;
+    };
+    let err = expand_to_command_and_args(cmd, ctx, out_cmd, None, None, false);
+    err == ExpandResultCode::ok
+}
+
+fn statement_get_expanded_command_ffi(
+    src: &CxxWString,
+    stmt: &ast::DecoratedStatement,
+    ctx: &OperationContext<'_>,
+) -> UniquePtr<CxxWString> {
+    let mut out_cmd = WString::new();
+    if statement_get_expanded_command(src.as_wstr(), stmt, ctx, &mut out_cmd) {
+        return out_cmd.to_ffi();
+    } else {
+        UniquePtr::null()
+    }
+}
+
 #[cxx::bridge]
 #[allow(clippy::needless_lifetimes)] // false positive
 mod highlighter_ffi {
@@ -114,6 +148,8 @@ mod highlighter_ffi {
         type highlighter_t = crate::ffi::highlighter_t;
         type Ast = crate::ast::Ast;
         type NodeFfi<'a> = crate::ast::NodeFfi<'a>;
+        type DecoratedStatement = crate::ast::DecoratedStatement;
+        type OperationContext<'a> = crate::operation_context::OperationContext<'a>;
     }
     extern "Rust" {
         type Highlighter<'a>;
@@ -123,6 +159,14 @@ mod highlighter_ffi {
         ) -> Box<Highlighter<'a>>;
         #[cxx_name = "visit_children"]
         unsafe fn visit_children_ffi<'a>(self: &mut Highlighter<'a>, node: &'a NodeFfi<'a>);
+    }
+    extern "Rust" {
+        #[cxx_name = "statement_get_expanded_command"]
+        fn statement_get_expanded_command_ffi(
+            src: &CxxWString,
+            stmt: &DecoratedStatement,
+            ctx: &OperationContext<'_>,
+        ) -> UniquePtr<CxxWString>;
     }
 }
 

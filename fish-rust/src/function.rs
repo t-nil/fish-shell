@@ -14,8 +14,10 @@ use crate::parser_keywords::parser_keywords_is_reserved;
 use crate::pointer::ConstPointer;
 use crate::wchar::{wstr, WString, L};
 use crate::wchar_ext::WExt;
+use crate::wchar_ffi::AsWstr;
 use crate::wutil::DirIter;
 use crate::{ast, event};
+use cxx::CxxWString;
 use once_cell::sync::Lazy;
 use printf_compat::sprintf;
 use std::collections::{HashMap, HashSet};
@@ -319,6 +321,10 @@ pub fn function_exists_no_autoload(cmd: &wstr) -> bool {
     funcset.get_props(cmd).is_some() || funcset.autoloader.can_autoload(cmd)
 }
 
+fn function_exists_no_autoload_ffi(cmd: &CxxWString) -> bool {
+    function_exists_no_autoload(cmd.as_wstr())
+}
+
 /// Returns all function names.
 ///
 /// \param get_hidden whether to include hidden functions, i.e. ones starting with an underscore.
@@ -488,4 +494,12 @@ fn get_function_body_source(props: &FunctionProperties) -> WString {
         return props.parsed_source.as_ref().unwrap().src[body_start..body_end].to_owned();
     }
     WString::new()
+}
+
+#[cxx::bridge]
+mod function_ffi {
+    extern "Rust" {
+        fn function_invalidate_path();
+        fn function_exists_no_autoload_ffi(cmd: &CxxWString) -> bool;
+    }
 }

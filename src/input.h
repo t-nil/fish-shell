@@ -75,7 +75,7 @@ class inputter_t final : private input_event_queue_t {
     char_event_t read_characters_no_readline();
 
     // We need a parser to evaluate bindings.
-    const std::shared_ptr<parser_t> parser_;
+    const ParserRef parser_;
 
     std::vector<wchar_t> input_function_args_{};
     bool function_status_{false};

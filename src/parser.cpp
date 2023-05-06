@@ -58,7 +58,7 @@ parser_t::parser_t(std::shared_ptr<env_stack_t> vars, bool is_principal)
 parser_t::~parser_t() = default;
 
 parser_t &parser_t::principal_parser() {
-    static const std::shared_ptr<parser_t> principal{
+    static const ParserRef principal{
         new parser_t(env_stack_t::principal_ref(), true)};
     principal->assert_can_execute();
     return *principal;
@@ -204,14 +204,14 @@ completion_list_t parser_t::expand_argument_list(const wcstring &arg_list_src,
     for (size_t i = 0; i < list.arguments().count(); i++) {
         const ast::argument_t &arg = *list.arguments().at(i);
         wcstring arg_src = *arg.source(arg_list_src);
-        if (expand_string(arg_src, &result, eflags, ctx) == expand_result_t::error) {
+        if (expand_string(arg_src, &result, eflags, ctx) == ExpandResultCode::error) {
             break;  // failed to expand a string
         }
     }
     return result;
 }
 
-std::shared_ptr<parser_t> parser_t::shared() { return shared_from_this(); }
+ParserRef parser_t::shared() { return shared_from_this(); }
 
 cancel_checker_t parser_t::cancel_checker() const {
     return [] { return signal_check_cancel() != 0; };
