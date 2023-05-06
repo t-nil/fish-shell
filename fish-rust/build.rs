@@ -65,6 +65,7 @@ fn main() -> miette::Result<()> {
         "src/parse_tree.rs",
         "src/parse_util.rs",
         "src/proc.rs",
+        "src/reader.rs",
         "src/redirection.rs",
         "src/signal.rs",
         "src/smoke.rs",

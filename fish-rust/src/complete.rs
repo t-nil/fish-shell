@@ -11,7 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::wchar_ffi::WCharToFFI;
+use crate::wchar_ffi::{WCharFromFFI, WCharToFFI};
 use bitflags::bitflags;
 use cxx::{CxxWString, UniquePtr};
 use once_cell::sync::Lazy;
@@ -2541,6 +2541,11 @@ mod complete_ffi {
         type CompletionListFfi;
 
         fn new_completion() -> Box<Completion>;
+        fn new_completion_with(
+            completion: &CxxWString,
+            description: &CxxWString,
+            flags: u8,
+        ) -> Box<Completion>;
         fn completion(self: &Completion) -> UniquePtr<CxxWString>;
         fn description(self: &Completion) -> UniquePtr<CxxWString>;
         fn replaces_commandline(self: &Completion) -> bool;
@@ -2551,6 +2556,8 @@ mod complete_ffi {
         fn size(self: &CompletionListFfi) -> usize;
         fn at(self: &CompletionListFfi, i: usize) -> &Completion;
         fn complete_invalidate_path();
+        fn reverse(self: &mut CompletionListFfi);
+        fn push(self: &mut CompletionListFfi, completion: &Completion);
     }
 }
 
@@ -2561,6 +2568,18 @@ unsafe impl cxx::ExternType for CompletionListFfi {
 
 fn new_completion() -> Box<Completion> {
     todo!()
+}
+fn new_completion_with(
+    completion: &CxxWString,
+    description: &CxxWString,
+    flags: u8,
+) -> Box<Completion> {
+    Box::new(Completion::new(
+        completion.from_ffi(),
+        description.from_ffi(),
+        StringFuzzyMatch::exact_match(),
+        CompleteFlags::from_bits(flags).unwrap(),
+    ))
 }
 fn new_completion_list() -> Box<CompletionListFfi> {
     todo!()
@@ -2582,5 +2601,11 @@ impl CompletionListFfi {
     }
     fn at(&self, i: usize) -> &Completion {
         &self.0[i]
+    }
+    fn reverse(&mut self) {
+        self.0.reverse();
+    }
+    fn push(&mut self, completion: &Completion) {
+        self.0.push(completion.clone());
     }
 }

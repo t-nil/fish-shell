@@ -171,18 +171,6 @@ static inline uint32_t read_generation_count() {
     return s_generation.load(std::memory_order_relaxed);
 }
 
-/// \return an operation context for a background operation..
-/// Crucially the operation context itself does not contain a parser.
-/// It is the caller's responsibility to ensure the environment lives as long as the result.
-static operation_context_t get_bg_context(const std::shared_ptr<environment_t> &env,
-                                          uint32_t generation_count) {
-    cancel_checker_t cancel_checker = [generation_count] {
-        // Cancel if the generation count changed.
-        return generation_count != read_generation_count();
-    };
-    return operation_context_t{nullptr, *env, std::move(cancel_checker), kExpansionLimitBackground};
-}
-
 /// We try to ensure that syntax highlighting completes appropriately before executing what the user
 /// typed. But we do not want it to block forever - e.g. it may hang on determining if an arbitrary
 /// argument is a path. This is how long we'll wait (in milliseconds) before giving up and
@@ -618,7 +606,7 @@ struct highlight_result_t {
 };
 
 struct history_pager_result_t {
-    completion_list_t matched_commands;
+    rust::Box<completion_list_t> matched_commands;
     size_t final_index;
     bool have_more_results;
 };
@@ -706,7 +694,7 @@ class reader_data_t : public std::enable_shared_from_this<reader_data_t> {
     /// Configuration for the reader.
     reader_config_t conf;
     /// The parser being used.
-    ParserRef parser_ref;
+    rust::Box<ParserRef> parser_ref;
     /// String containing the whole current commandline.
     editable_line_t command_line;
     /// Whether the most recent modification to the command line was done by either history search
@@ -837,19 +825,18 @@ class reader_data_t : public std::enable_shared_from_this<reader_data_t> {
     void paint_layout(const wchar_t *reason);
 
     /// Return the variable set used for e.g. command duration.
-    const env_stack_t &vars() const { return parser_ref->vars(); }
+    const env_stack_t &vars() const { return parser_ref->deref().vars(); }
 
     /// Access the parser.
-    parser_t &parser() { return *parser_ref; }
-    const parser_t &parser() const { return *parser_ref; }
+    const parser_t &parser() const { return parser_ref->deref(); }
 
     /// Convenience cover over exec_count().
     uint64_t exec_count() const { return parser().libdata().exec_count(); }
 
-    reader_data_t(ParserRef parser, HistorySharedPtr &hist, reader_config_t &&conf)
+    reader_data_t(rust::Box<ParserRef> parser, HistorySharedPtr &hist, reader_config_t &&conf)
         : conf(std::move(conf)),
           parser_ref(std::move(parser)),
-          inputter(*parser_ref, conf.in),
+          inputter(parser_ref->shared(), conf.in),
           history(hist.clone()) {}
 
     void update_buff_pos(editable_line_t *el, maybe_t<size_t> new_pos = none_t());
@@ -946,7 +933,7 @@ class reader_data_t : public std::enable_shared_from_this<reader_data_t> {
     void delete_char(bool backward = true);
 
     /// Called to update the termsize, including $COLUMNS and $LINES, as necessary.
-    void update_termsize() { termsize_update_ffi(reinterpret_cast<unsigned char *>(&parser())); }
+    void update_termsize() { termsize_update(parser()); }
 
     // Import history from older location (config path) if our current history is empty.
     void import_history_if_necessary();
@@ -1314,7 +1301,7 @@ static history_pager_result_t history_pager_search(const HistorySharedPtr &histo
     // (subtract 2 for the search line and the prompt)
     size_t page_size = std::max(termsize_last().height / 2 - 2, (rust::isize)12);
 
-    completion_list_t completions;
+    rust::Box<completion_list_t> completions = new_completion_list();
     rust::Box<HistorySearch> search =
         rust_history_search_new(history, search_string.c_str(), history_search_type_t::Contains,
                                 smartcase_flags(search_string), history_index);
@@ -1326,17 +1313,18 @@ static history_pager_result_t history_pager_search(const HistorySharedPtr &histo
                                          smartcase_flags(search_string), history_index);
         next_match_found = search->go_to_next_match(direction);
     }
-    while (completions.size() < page_size && next_match_found) {
+    while (completions->size() < page_size && next_match_found) {
         const history_item_t &item = search->current_item();
-        completions.push_back(completion_t{
-            *item.str(), L"", string_fuzzy_match_t::exact_match(),
-            COMPLETE_REPLACES_COMMANDLINE | COMPLETE_DONT_ESCAPE | COMPLETE_DONT_SORT});
+        completions->push_back(*new_completion_with(
+            *item.str(), L"",
+            COMPLETE_REPLACES_COMMANDLINE | COMPLETE_DONT_ESCAPE | COMPLETE_DONT_SORT));
 
         next_match_found = search->go_to_next_match(direction);
     }
     size_t last_index = search->current_index();
-    if (direction == history_search_direction_t::Forward)
-        std::reverse(completions.begin(), completions.end());
+    if (direction == history_search_direction_t::Forward) {
+        completions->reverse();
+    }
     return {completions, last_index, search->go_to_next_match(direction)};
 }
 
@@ -1360,7 +1348,7 @@ void reader_data_t::fill_history_pager(bool new_search, history_search_direction
         [=](const history_pager_result_t &result) {
             if (search_term != shared_this->pager.search_field_line.text())
                 return;  // Stale request.
-            if (result.matched_commands.empty() && !new_search) {
+            if (result.matched_commands->empty() && !new_search) {
                 // No more matches, keep the existing ones and flash.
                 shared_this->flash();
                 return;
@@ -1374,7 +1362,7 @@ void reader_data_t::fill_history_pager(bool new_search, history_search_direction
             }
             shared_this->pager.extra_progress_text =
                 result.have_more_results ? _(L"Search again for more results") : L"";
-            shared_this->pager.set_completions(result.matched_commands);
+            shared_this->pager.set_completions(*result.matched_commands);
             shared_this->select_completion_in_direction(selection_motion_t::next, true);
             shared_this->super_highlight_me_plenty();
             shared_this->layout_and_repaint(L"history-pager");
@@ -1619,7 +1607,9 @@ void reader_data_t::exec_prompt() {
 
     // If we have any prompts, they must be run non-interactively.
     if (!conf.left_prompt_cmd.empty() || !conf.right_prompt_cmd.empty()) {
-        scoped_push<bool> noninteractive{&parser().libdata().is_interactive, false};
+        // todo! scoped push
+        bool is_interactive = parser().libdata().pods.is_interactive;
+        parser().libdata_pod_mut().is_interactive = false;
 
         exec_mode_prompt();
 
@@ -1647,6 +1637,7 @@ void reader_data_t::exec_prompt() {
                 }
             }
         }
+        parser().libdata_mut().is_interactive = is_interactive;
     }
 
     // Write the screen title. Do not reset the cursor position: exec_prompt is called when there

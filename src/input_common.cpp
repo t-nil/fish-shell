@@ -58,7 +58,7 @@ using readb_result_t = int;
 
 static readb_result_t readb(int in_fd) {
     assert(in_fd >= 0 && "Invalid in fd");
-    universal_notifier_t& notifier = universal_notifier_t::default_notifier();
+    universal_notifier_t& notifier = default_notifier();
     auto fdset_box = new_fd_readable_set();
     fd_readable_set_t& fdset = *fdset_box;
     for (;;) {

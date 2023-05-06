@@ -13,9 +13,8 @@
 
 #include "color.h"
 #include "common.h"
+#include "env.h"
 #include "fallback.h"  // IWYU pragma: keep
-
-class env_var_t;
 
 class outputter_t {
     /// Storage for buffered contents.

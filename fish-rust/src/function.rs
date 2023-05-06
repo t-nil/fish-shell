@@ -8,16 +8,17 @@ use crate::common::{escape, valid_func_name, FilenameRef};
 use crate::complete::complete_get_wrap_targets;
 use crate::env::{EnvStack, Environment};
 use crate::event::EventType;
-use crate::parse_tree::ParsedSourceRef;
+use crate::ffi;
+use crate::parse_tree::{ParsedSourceRef, ParsedSourceRefFFI};
 use crate::parser::Parser;
 use crate::parser_keywords::parser_keywords_is_reserved;
 use crate::pointer::ConstPointer;
 use crate::wchar::{wstr, WString, L};
 use crate::wchar_ext::WExt;
-use crate::wchar_ffi::AsWstr;
+use crate::wchar_ffi::{AsWstr, WCharFromFFI};
 use crate::wutil::DirIter;
 use crate::{ast, event};
-use cxx::CxxWString;
+use cxx::{CxxWString, UniquePtr};
 use once_cell::sync::Lazy;
 use printf_compat::sprintf;
 use std::collections::{HashMap, HashSet};
@@ -498,8 +499,92 @@ fn get_function_body_source(props: &FunctionProperties) -> WString {
 
 #[cxx::bridge]
 mod function_ffi {
+    extern "C++" {
+        include!("wutil.h");
+        include!("ast.h");
+        include!("parser.h");
+        include!("parse_tree.h");
+        type wcstring_list_ffi_t = crate::ffi::wcstring_list_ffi_t;
+        type Parser = crate::parser::Parser;
+        type BlockStatement = crate::ast::BlockStatement;
+        type ParsedSourceRefFFI = crate::parse_tree::ParsedSourceRefFFI;
+    }
     extern "Rust" {
+        type FunctionProperties;
+        type FunctionPropertiesRefFFI;
+
+        fn new_function_properties(
+            shadow_scope: bool,
+            named_arguments: &wcstring_list_ffi_t,
+            parsed_source: &ParsedSourceRefFFI,
+            func_node: &BlockStatement,
+            description: &CxxWString,
+            definition_file: &CxxWString,
+            parser: &Parser,
+        ) -> Box<FunctionPropertiesRefFFI>;
+
         fn function_invalidate_path();
         fn function_exists_no_autoload_ffi(cmd: &CxxWString) -> bool;
+        #[cxx_name = "function_add"]
+        fn ffi_function_add(name: &CxxWString, props: &FunctionPropertiesRefFFI);
+        #[cxx_name = "function_copy"]
+        fn ffi_function_copy(name: &CxxWString, new_name: &CxxWString, parser: &Parser) -> bool;
+        #[cxx_name = "function_exists"]
+        fn ffi_function_exists(cmd: &CxxWString, parser: &Parser) -> bool;
+        #[cxx_name = "function_get_names"]
+        fn ffi_function_get_names(get_hidden: bool) -> UniquePtr<wcstring_list_ffi_t>;
+        #[cxx_name = "function_get_props_autoload"]
+        fn ffi_function_get_props_autoload(name: &CxxWString, parser: &Parser) -> *const i32;
+        #[cxx_name = "function_remove"]
+        fn ffi_function_remove(name: &CxxWString);
     }
+}
+
+struct FunctionPropertiesRefFFI(pub FunctionPropertiesRef);
+
+fn new_function_properties(
+    shadow_scope: bool,
+    named_arguments: &ffi::wcstring_list_ffi_t,
+    parsed_source: &ParsedSourceRefFFI,
+    func_node: &ast::BlockStatement,
+    description: &CxxWString,
+    definition_file: &CxxWString,
+    parser: &Parser,
+) -> Box<FunctionPropertiesRefFFI> {
+    let mut props = FunctionProperties::new();
+    props.shadow_scope = shadow_scope;
+    props.named_arguments = named_arguments.from_ffi();
+    props.parsed_source = parsed_source.0.clone();
+    props.func_node = ConstPointer::from(func_node);
+    props.definition_file = parser.libdata().current_filename.clone();
+    Box::new(FunctionPropertiesRefFFI(Arc::new(RwLock::new(props))))
+}
+
+fn ffi_function_add(name: &CxxWString, props: &FunctionPropertiesRefFFI) {
+    function_add(name.from_ffi(), props.0.clone());
+}
+
+fn ffi_function_copy(name: &CxxWString, new_name: &CxxWString, parser: &Parser) -> bool {
+    function_copy(name.as_wstr(), new_name.from_ffi(), parser)
+}
+
+fn ffi_function_exists(cmd: &CxxWString, parser: &Parser) -> bool {
+    function_exists(cmd.as_wstr(), parser)
+}
+
+fn ffi_function_get_names(get_hidden: bool) -> UniquePtr<ffi::wcstring_list_ffi_t> {
+    let mut x = ffi::wcstring_list_ffi_t::create();
+    // function_get_names(get_hidden)
+    todo!()
+}
+
+fn ffi_function_get_props_autoload(name: &CxxWString, parser: &Parser) -> *const i32 {
+    match function_get_props_autoload(name.as_wstr(), parser) {
+        Some(props) => (&props.read().unwrap()) as *const _ as *const i32,
+        None => std::ptr::null(),
+    }
+}
+
+fn ffi_function_remove(name: &CxxWString) {
+    function_remove(name.as_wstr());
 }

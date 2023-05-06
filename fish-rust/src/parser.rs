@@ -3,7 +3,7 @@
 use crate::ast::{Ast, List, Node};
 use crate::builtins::shared::STATUS_ILLEGAL_CMD;
 use crate::common::{
-    escape_string, scoped_push, scoped_push_replacer, CancelChecker, EscapeFlags,
+    escape_string, scoped_push, scoped_push_replacer, CancelChecker, Cleanup, EscapeFlags,
     EscapeStringStyle, FilenameRef, ScopeGuard, PROFILING_ACTIVE,
 };
 use crate::complete::CompletionList;
@@ -1302,6 +1302,7 @@ mod parser_ffi {
     }
 
     extern "C++" {
+        include!("operation_context.h");
         include!("wutil.h");
         include!("env.h");
         include!("io.h");
@@ -1316,6 +1317,7 @@ mod parser_ffi {
         #[cxx_name = "env_stack_set_result_t"]
         type EnvStackSetResult = crate::env::EnvStackSetResult;
         type wcstring_list_ffi_t = crate::ffi::wcstring_list_ffi_t;
+        type OperationContext<'a> = crate::operation_context::OperationContext<'a>;
     }
     extern "Rust" {
         type Block;
@@ -1324,10 +1326,6 @@ mod parser_ffi {
     extern "Rust" {
         type LibraryData;
         fn exec_count(&self) -> u64;
-    }
-    extern "Rust" {
-        #[cxx_name = "ParserRef"]
-        type ParserRefFFI;
     }
     extern "Rust" {
         type Parser;
@@ -1358,6 +1356,9 @@ mod parser_ffi {
         fn ffi_jobs(&self) -> Box<JobListFfi>;
         #[cxx_name = "libdata"]
         fn ffi_libdata(&self) -> &LibraryData;
+        // todo!
+        // #[cxx_name = "context"]
+        // fn ffi_context(&self) -> Box<OperationContext<'static>>;
         #[cxx_name = "vars"]
         fn ffi_vars(&self) -> &EnvStackRefFFI;
         fn sync_uvars_and_fire(&self, always: bool);
@@ -1370,6 +1371,13 @@ mod parser_ffi {
             mode: u16,
             vals: &wcstring_list_ffi_t,
         ) -> EnvStackSetResult;
+    }
+    extern "Rust" {
+        #[cxx_name = "ParserRef"]
+        type ParserRefFFI;
+        #[cxx_name = "vars"]
+        fn ffi_vars(&self) -> &EnvStackRefFFI;
+        fn deref(&self) -> &Parser;
     }
 }
 
@@ -1444,5 +1452,17 @@ impl Parser {
     }
     fn ffi_libdata(&self) -> &LibraryData {
         unsafe { self.library_data.try_borrow_unguarded() }.unwrap()
+    }
+    fn ffi_context(&self) -> Box<OperationContext<'static>> {
+        Box::new(self.context())
+    }
+}
+
+impl ParserRefFFI {
+    fn deref(&self) -> &Parser {
+        &*self.0
+    }
+    fn ffi_vars(&self) -> &EnvStackRefFFI {
+        &self.0.variables_ffi
     }
 }

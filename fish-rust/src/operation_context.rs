@@ -107,7 +107,8 @@ impl<'a> OperationContext<'a> {
 #[cxx::bridge]
 mod operation_context_ffi {
     extern "C++" {
-        include!("env.h");
+        // include!("env.h");
+        include!("env_fwd.h");
         #[cxx_name = "EnvStackRef"]
         type EnvStackRefFFI = crate::env::EnvStackRefFFI;
     }

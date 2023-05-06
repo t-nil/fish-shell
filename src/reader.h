@@ -21,6 +21,10 @@
 #include "parse_constants.h"
 #include "parser.h"
 
+#if INCLUDE_RUST_HEADERS
+#include "reader.rs.h"
+#endif
+
 /// An edit action that can be undone.
 struct edit_t {
     /// When undoing the edit we use this to restore the previous cursor position.

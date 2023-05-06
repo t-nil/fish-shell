@@ -1,3 +1,7 @@
+#if INCLUDE_RUST_HEADERS
+#include "function.rs.h"
+#endif
+
 #if 0
 // Prototypes for functions for storing and retrieving function information. These functions also
 // take care of autoloading functions in the $fish_function_path. Actual function evaluation is
