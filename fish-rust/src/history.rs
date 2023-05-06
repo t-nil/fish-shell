@@ -105,6 +105,7 @@ mod history_ffi {
         #[rust_name = "in_private_mode_ffi"]
         fn in_private_mode(vars: &EnvDynFFI) -> bool;
         fn history_never_mmap() -> bool;
+        #[cxx_name = "all_paths_are_valid"]
         fn all_paths_are_valid_ffi(paths: &wcstring_list_ffi_t, ctx: &OperationContext<'_>)
             -> bool;
     }

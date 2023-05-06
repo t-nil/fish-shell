@@ -311,7 +311,7 @@ static bool is_potential_cd_path(const wcstring &path, bool at_cursor,
         // Get the CDPATH.
         auto cdpath = ctx.vars().get_unless_empty(L"CDPATH");
         std::vector<wcstring> pathsv =
-            !cdpath ? std::vector<wcstring>{L"."} : cdpath->as_list().vals;
+            !cdpath ? std::vector<wcstring>{L"."} : cdpath->as_list()->vals;
         // The current $PWD is always valid.
         pathsv.push_back(L".");
 
@@ -1307,7 +1307,7 @@ std::string colorize(const wcstring &text, const std::vector<highlight_spec_t> &
 
 void highlight_shell(const wcstring &buff, std::vector<highlight_spec_t> &color,
                      const operation_context_t &ctx, bool io_ok, maybe_t<size_t> cursor) {
-    const wcstring working_directory = ctx.vars.get_pwd_slash();
+    const wcstring working_directory = std::move(*ctx.vars().get_pwd_slash());
     highlighter_t highlighter(buff, cursor, ctx, working_directory, io_ok);
     color = highlighter.highlight();
 }
@@ -1315,6 +1315,6 @@ void highlight_shell(const wcstring &buff, std::vector<highlight_spec_t> &color,
 wcstring colorize_shell(const wcstring &text, void *parser_) {
     parser_t &parser = *static_cast<parser_t *>(parser_);
     std::vector<highlight_spec_t> colors;
-    highlight_shell(text, colors, parser.context());
+    highlight_shell(text, colors, *parser.context());
     return str2wcstring(colorize(text, colors, parser.vars()));
 }

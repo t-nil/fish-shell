@@ -94,7 +94,7 @@ maybe_t<wcstring> path_get_path(const wcstring &cmd, const environment_t &vars) 
 
 get_path_result_t path_try_get_path(const wcstring &cmd, const environment_t &vars) {
     auto pathvar = vars.get(L"PATH");
-    return path_get_path_core(cmd, pathvar ? pathvar->as_list() : kDefaultPath);
+    return path_get_path_core(cmd, pathvar ? pathvar->as_list()->vals : kDefaultPath);
 }
 
 static bool path_is_executable(const std::string &path) {
@@ -158,7 +158,7 @@ std::vector<wcstring> path_get_paths(const wcstring &cmd, const environment_t &v
     auto path_var = vars.get(L"PATH");
     if (!path_var) return paths;
 
-    const std::vector<wcstring> &pathsv = path_var->as_list();
+    td::vector<wcstring> pathsv = path_var->as_list()->vals;
     for (auto path : pathsv) {
         if (path.empty()) continue;
         append_path_component(path, cmd);
@@ -183,7 +183,7 @@ std::vector<wcstring> path_apply_cdpath(const wcstring &dir, const wcstring &wd,
         // Respect CDPATH.
         std::vector<wcstring> cdpathsv;
         if (auto cdpaths = env_vars.get(L"CDPATH")) {
-            cdpathsv = cdpaths->as_list();
+            cdpathsv = cdpaths->as_list()->vals;
         }
         // Always append $PWD
         cdpathsv.push_back(L".");
@@ -282,7 +282,7 @@ static void maybe_issue_path_warning(const wcstring &which_dir, const wcstring &
                                      bool using_xdg, const wcstring &xdg_var, const wcstring &path,
                                      int saved_errno, env_stack_t &vars) {
     wcstring warning_var_name = L"_FISH_WARNED_" + which_dir;
-    if (vars.get(warning_var_name, ENV_GLOBAL | ENV_EXPORT)) {
+    if (vars.getf(warning_var_name, ENV_GLOBAL | ENV_EXPORT)) {
         return;
     }
     vars.set_one(warning_var_name, ENV_GLOBAL | ENV_EXPORT, L"1");

@@ -346,7 +346,7 @@ static comp_info_list_t process_completions_into_infos(const completion_list_t &
             // then writing a variant of escape_string() that adjusts highlighting according
             // so it matches the escaped string.
             && MB_CUR_MAX > 1) {
-            highlight_shell(*comp.completion(), comp_info->colors, *operation_context_t::empty());
+            highlight_shell(*comp.completion(), comp_info->colors, *empty_operation_context());
             assert(comp_info->comp.back().size() >= comp_info->colors.size());
         }
 

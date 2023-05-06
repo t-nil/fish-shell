@@ -33,6 +33,8 @@ struct JobRefFfi;
 struct JobGroupRefFfi;
 #endif
 
+struct Parser;
+
 #if 0
 struct statuses_t;
 

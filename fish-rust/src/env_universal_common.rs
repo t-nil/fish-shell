@@ -354,7 +354,16 @@ pub fn get_runtime_path() -> WString {
     todo!()
 }
 
+pub struct UniversalNotifierFFI(pub &'static dyn UniversalNotifier);
+
 #[cxx::bridge]
 mod env_universal_common_ffi {
-    extern "Rust" {}
+    extern "Rust" {
+        type UniversalNotifierFFI;
+        fn ffi_default_notifier() -> Box<UniversalNotifierFFI>;
+    }
+}
+
+fn ffi_default_notifier() -> Box<UniversalNotifierFFI> {
+    Box::new(UniversalNotifierFFI(default_notifier()))
 }
