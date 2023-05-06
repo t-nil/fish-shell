@@ -7,8 +7,6 @@
 #include "common.h"
 #include "env.h"
 
-class env_stack_t;
-
 /// Initialize variable dispatch.
 void env_dispatch_init(const environment_t &vars);
 

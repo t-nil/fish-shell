@@ -479,7 +479,7 @@ int main(int argc, char **argv) {
     if (opts.is_login) mark_login();
     if (opts.no_exec) mark_no_exec();
     if (opts.is_interactive_session) set_interactive_session(true);
-    if (opts.enable_private_mode) start_private_mode(env_stack_t::globals());
+    if (opts.enable_private_mode) start_private_mode(env_stack_globals());
 
     // Only save (and therefore restore) the fg process group if we are interactive. See issues
     // #197 and #1002.
@@ -497,7 +497,7 @@ int main(int argc, char **argv) {
     // Set features early in case other initialization depends on them.
     // Start with the ones set in the environment, then those set on the command line (so the
     // command line takes precedence).
-    if (auto features_var = env_stack_t::globals().get(L"fish_features")) {
+    if (auto features_var = env_stack_globals().get(L"fish_features")) {
         for (const wcstring &s : features_var->as_list()) {
             mutable_fish_features()->set_from_string(s.c_str());
         }

@@ -136,7 +136,7 @@ void env_dispatch_init(const environment_t &vars) {
 
 /// Properly sets all timezone information.
 static void handle_timezone(const wchar_t *env_var_name, const environment_t &vars) {
-    const auto var = vars.get_unless_empty(env_var_name, ENV_DEFAULT);
+    const auto var = vars.get_unless_empty(env_var_name);
     FLOGF(env_dispatch, L"handle_timezone() current timezone var: |%ls| => |%ls|", env_var_name,
           !var ? L"MISSING/EMPTY" : var->as_string().c_str());
     std::string name = wcs2zstring(env_var_name);
@@ -196,7 +196,7 @@ void env_dispatch_var_change(const wcstring &key, env_stack_t &vars) {
 }
 
 void env_dispatch_var_change_ffi(const wcstring &key) {
-    return env_dispatch_var_change(key, env_stack_t::principal());
+    return env_dispatch_var_change(key, env_stack_principal());
 }
 
 static void handle_fish_term_change(const env_stack_t &vars) {
@@ -213,9 +213,7 @@ static void handle_change_ambiguous_width(const env_stack_t &vars) {
 }
 
 static void handle_term_size_change(const env_stack_t &vars) {
-    // Need to use a pointer to send this through cxx ffi.
-    const environment_t &env_vars = vars;
-    handle_columns_lines_var_change_ffi(reinterpret_cast<const unsigned char *>(&env_vars));
+    handle_columns_lines_var_change_ffi(env_vars);
 }
 
 static void handle_fish_history_change(const env_stack_t &vars) {
@@ -294,7 +292,7 @@ static void handle_fish_use_posix_spawn_change(const environment_t &vars) {
 static void handle_read_limit_change(const environment_t &vars) {
     auto read_byte_limit_var = vars.get_unless_empty(L"fish_read_limit");
     if (read_byte_limit_var) {
-        size_t limit = fish_wcstoull(read_byte_limit_var->as_string().c_str());
+        size_t limit = fish_wcstoull(read_byte_limit_var->as_string()->c_str());
         if (errno) {
             FLOGF(warning, "Ignoring fish_read_limit since it is not valid");
         } else {
@@ -306,7 +304,7 @@ static void handle_read_limit_change(const environment_t &vars) {
 }
 
 static void handle_fish_trace(const environment_t &vars) {
-    trace_set_enabled(vars.get_unless_empty(L"fish_trace").has_value());
+    trace_set_enabled(vars.get_unless_empty(L"fish_trace"));
 }
 
 /// Populate the dispatch table used by `env_dispatch_var_change()` to efficiently call the

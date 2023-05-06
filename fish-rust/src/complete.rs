@@ -135,6 +135,7 @@ pub fn const_desc(s: &wstr) -> DescriptionFunc {
 pub type CompletionList = Vec<Completion>;
 
 /// This is an individual completion entry, i.e. the result of an expansion of a completion rule.
+#[derive(Clone)]
 pub struct Completion {
     /// The completion string.
     pub completion: WString,
@@ -2543,9 +2544,13 @@ mod complete_ffi {
         fn completion(self: &Completion) -> UniquePtr<CxxWString>;
         fn description(self: &Completion) -> UniquePtr<CxxWString>;
         fn replaces_commandline(self: &Completion) -> bool;
+        #[cxx_name = "clone"]
+        fn clone_ffi(self: &Completion) -> Box<Completion>;
+
         fn new_completion_list() -> Box<CompletionListFfi>;
         fn size(self: &CompletionListFfi) -> usize;
         fn at(self: &CompletionListFfi, i: usize) -> &Completion;
+        fn complete_invalidate_path();
     }
 }
 
@@ -2566,6 +2571,9 @@ impl Completion {
     }
     fn description(&self) -> UniquePtr<CxxWString> {
         self.description.to_ffi()
+    }
+    fn clone_ffi(&self) -> Box<Completion> {
+        Box::new(self.clone())
     }
 }
 impl CompletionListFfi {

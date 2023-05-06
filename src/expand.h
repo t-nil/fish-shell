@@ -96,7 +96,12 @@ enum : wchar_t {
 
 #if INCLUDE_RUST_HEADERS
 #include "expand.rs.h"
+using expand_result_t = ExpandResult;
 #endif
+
+/// The string represented by PROCESS_EXPAND_SELF
+#define PROCESS_EXPAND_SELF_STR L"%self"
+#define PROCESS_EXPAND_SELF_STR_LEN 5
 
 #if 0
 /// These are the possible return values for expand_string.
@@ -134,10 +139,6 @@ struct expand_result_t {
         return result;
     }
 };
-
-/// The string represented by PROCESS_EXPAND_SELF
-#define PROCESS_EXPAND_SELF_STR L"%self"
-#define PROCESS_EXPAND_SELF_STR_LEN 5
 
 /// Perform various forms of expansion on in, such as tilde expansion (\~USER becomes the users home
 /// directory), variable expansion (\$VAR_NAME becomes the value of the environment variable

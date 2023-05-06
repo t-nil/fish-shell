@@ -129,7 +129,7 @@ static const char *highlight_role_to_string(highlight_role_t role) {
 static std::string make_pygments_csv(const wcstring &src) {
     const size_t len = src.size();
     std::vector<highlight_spec_t> colors;
-    highlight_shell(src, colors, operation_context_t::globals());
+    highlight_shell(src, colors, operation_context_globals());
     assert(colors.size() == len && "Colors and src should have same size");
 
     struct token_range_t {
@@ -298,7 +298,7 @@ int main(int argc, char *argv[]) {
     setlocale(LC_ALL, "");
     env_init();
 
-    if (auto features_var = env_stack_t::globals().get(L"fish_features")) {
+    if (auto features_var = env_stack_globals().get(L"fish_features")) {
         for (const wcstring &s : features_var->as_list()) {
             mutable_fish_features()->set_from_string(s.c_str());
         }
@@ -450,7 +450,7 @@ int main(int argc, char *argv[]) {
         // Maybe colorize.
         std::vector<highlight_spec_t> colors;
         if (output_type != output_type_plain_text) {
-            highlight_shell(output_wtext, colors, operation_context_t::globals());
+            highlight_shell(output_wtext, colors, operation_context_globals());
         }
 
         std::string colored_output;
@@ -472,7 +472,7 @@ int main(int argc, char *argv[]) {
                 break;
             }
             case output_type_ansi: {
-                colored_output = colorize(output_wtext, colors, env_stack_t::globals());
+                colored_output = colorize(output_wtext, colors, env_stack_globals());
                 break;
             }
             case output_type_html: {

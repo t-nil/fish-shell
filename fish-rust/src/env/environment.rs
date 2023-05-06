@@ -5,8 +5,9 @@ use super::environment_impl::{
 use crate::abbrs::{abbrs_get_set, Abbreviation, Position};
 use crate::common::{unescape_string, UnescapeStringStyle};
 use crate::env::{EnvMode, EnvStackSetResult, EnvVar, Statuses};
+use crate::env_universal_common::{self, CallbackDataList, EnvUniversal, UniversalNotifier};
 use crate::event::Event;
-use crate::ffi::{self, env_universal_t, universal_notifier_t};
+use crate::ffi;
 use crate::flog::FLOG;
 use crate::global_safety::RelaxedAtomicBool;
 use crate::null_terminated_array::OwningNullTerminatedArray;
@@ -27,16 +28,11 @@ const DFLT_FISH_HISTORY_SESSION_ID: &wstr = L!("fish");
 
 // Universal variables instance.
 lazy_static! {
-    static ref UVARS: Mutex<UniquePtr<env_universal_t>> = Mutex::new(env_universal_t::new_unique());
+    static ref UVARS: Mutex<EnvUniversal> = Mutex::new(EnvUniversal::new());
 }
 
 /// Set when a universal variable has been modified but not yet been written to disk via sync().
 static UVARS_LOCALLY_MODIFIED: RelaxedAtomicBool = RelaxedAtomicBool::new(false);
-
-/// Convert an EnvVar to an FFI env_var_t.
-fn env_var_to_ffi(var: EnvVar) -> cxx::UniquePtr<ffi::env_var_t> {
-    ffi::env_var_t::new_ffi(Box::into_raw(Box::from(var)).cast()).within_unique_ptr()
-}
 
 pub type EnvironmentRef = Arc<dyn Environment>;
 
@@ -315,20 +311,18 @@ impl EnvStack {
         }
         UVARS_LOCALLY_MODIFIED.store(false);
 
-        let mut unused = autocxx::c_int(0);
-        let sync_res_ptr = uvars().as_mut().unwrap().sync_ffi().within_unique_ptr();
-        let sync_res = sync_res_ptr.as_ref().unwrap();
-        if sync_res.get_changed() {
-            universal_notifier_t::default_notifier_ffi(std::pin::Pin::new(&mut unused))
-                .post_notification();
+        let mut callbacks = CallbackDataList::new();
+        let changed = uvars().sync(&mut callbacks);
+        if changed {
+            env_universal_common::default_notifier().post_notification();
         }
         // React internally to changes to special variables like LANG, and populate on-variable events.
         let mut result = Vec::new();
         #[allow(unreachable_code)]
-        for idx in 0..sync_res.count() {
-            let name = sync_res.get_key(idx).from_ffi();
+        for callback in callbacks {
+            let name = callback.key;
             ffi::env_dispatch_var_change_ffi(&name.to_ffi() /* , self */);
-            let evt = if sync_res.get_is_erase(idx) {
+            let evt = if callback.val.is_none() {
                 Event::variable_erase(name)
             } else {
                 Event::variable_set(name)
@@ -407,30 +401,20 @@ pub fn env_init(do_uvars: bool) {
         // let vars = EnvStack::principal();
 
         // Set up universal variables using the default path.
-        let callbacks = uvars()
-            .as_mut()
-            .unwrap()
-            .initialize_ffi()
-            .within_unique_ptr();
-        let callbacks = callbacks.as_ref().unwrap();
-        for idx in 0..callbacks.count() {
-            ffi::env_dispatch_var_change_ffi(callbacks.get_key(idx) /* , vars */);
+        let mut callbacks = CallbackDataList::new();
+        uvars().initialize(&mut callbacks);
+        for callback in callbacks {
+            ffi::env_dispatch_var_change_ffi(&callback.key.to_ffi() /* , vars */);
         }
 
         // Do not import variables that have the same name and value as
         // an exported universal variable. See issues #5258 and #5348.
-        let mut table = uvars()
-            .as_ref()
-            .unwrap()
-            .get_table_ffi()
-            .within_unique_ptr();
-        for idx in 0..table.count() {
-            // autocxx gets confused when a value goes Rust -> Cxx -> Rust.
-            let uvar = table.as_mut().unwrap().get_var(idx).from_ffi();
+        let uvars_locked = uvars();
+        let table = uvars_locked.get_table();
+        for (name, uvar) in table {
             if !uvar.exports() {
                 continue;
             }
-            let name: &wstr = table.get_name(idx).as_wstr();
 
             // Look for a global exported variable with the same name.
             let global = EnvStack::globals().getf(name, EnvMode::GLOBAL | EnvMode::EXPORT);
@@ -445,15 +429,13 @@ pub fn env_init(do_uvars: bool) {
         let prefix_len = prefix.char_count();
         let from_universal = true;
         let mut abbrs = abbrs_get_set();
-        for idx in 0..table.count() {
-            let name: &wstr = table.get_name(idx).as_wstr();
+        for (name, uvar) in table {
             if !name.starts_with(prefix) {
                 continue;
             }
             let escaped_name = name.slice_from(prefix_len);
             if let Some(name) = unescape_string(escaped_name, UnescapeStringStyle::Var) {
                 let key = name.clone();
-                let uvar = table.get_var(idx).from_ffi();
                 let replacement: WString = join_strings(uvar.as_list(), ' ');
                 abbrs.add(Abbreviation::new(
                     name,

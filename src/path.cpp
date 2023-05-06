@@ -347,7 +347,7 @@ static base_directory_t make_base_directory(const wcstring &xdg_var,
     // The vars we fetch must be exported. Allowing them to be universal doesn't make sense and
     // allowing that creates a lock inversion that deadlocks the shell since we're called before
     // uvars are available.
-    const auto &vars = env_stack_t::globals();
+    const auto &vars = env_stack_globals();
     base_directory_t result{};
     const auto xdg_dir = vars.get_unless_empty(xdg_var, ENV_GLOBAL | ENV_EXPORT);
     if (xdg_dir) {

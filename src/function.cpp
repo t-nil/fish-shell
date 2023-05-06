@@ -93,7 +93,7 @@ bool function_load(const wcstring &name, parser_t &parser) {
     {
         auto funcset = function_set.acquire();
         if (funcset->allow_autoload(name)) {
-            path_to_autoload = funcset->autoloader.resolve_command(name, env_stack_t::globals());
+            path_to_autoload = funcset->autoloader.resolve_command(name, env_stack_globals());
         }
     }
 
@@ -111,7 +111,7 @@ static void autoload_names(std::unordered_set<wcstring> &names, bool get_hidden)
     size_t i;
 
     // TODO: justify this.
-    auto &vars = env_stack_t::principal();
+    auto &vars = env_stack_principal();
     const auto path_var = vars.get_unless_empty(L"fish_function_path");
     if (!path_var) return;
 

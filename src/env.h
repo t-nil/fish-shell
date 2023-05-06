@@ -1,13 +1,3 @@
-#if INCLUDE_RUST_HEADERS
-#include "env/env_ffi.rs.h"
-#else
-struct EnvVar;
-struct EnvNull;
-struct EnvStackRef;
-struct EnvDyn;
-struct EnvironmentRef;
-#endif
-
 // Prototypes for functions for manipulating fish script variables.
 #ifndef FISH_ENV_H
 #define FISH_ENV_H
@@ -26,6 +16,18 @@ struct EnvironmentRef;
 #include "cxx.h"
 #include "maybe.h"
 #include "wutil.h"
+
+#if INCLUDE_RUST_HEADERS
+#include "env/env_ffi.rs.h"
+#else
+struct EnvVar;
+struct EnvNull;
+struct EnvStack;
+struct EnvStackRef;
+struct EnvDyn;
+struct EnvironmentRef;
+enum class env_stack_set_result_t : uint8_t;
+#endif
 
 struct event_list_ffi_t;
 
@@ -119,188 +121,99 @@ void misc_init();
 
 /// env_var_t is an immutable value-type data structure representing the value of an environment
 /// variable. This wraps the EnvVar type from Rust.
-class env_var_t {
-   public:
-    using env_var_flags_t = uint8_t;
-    enum {
-        flag_export = 1 << 0,     // whether the variable is exported
-        flag_read_only = 1 << 1,  // whether the variable is read only
-        flag_pathvar = 1 << 2,    // whether the variable is a path variable
-    };
-    env_var_t() : env_var_t(wcstring_list_ffi_t{}, 0) {}
-    env_var_t(const wcstring_list_ffi_t &vals, uint8_t flags);
-    env_var_t(const env_var_t &);
-    env_var_t(env_var_t &&) = default;
+using env_var_t = EnvVar;
+// class env_var_t {
+//    public:
+//     using env_var_flags_t = uint8_t;
+//     enum {
+//         flag_export = 1 << 0,     // whether the variable is exported
+//         flag_read_only = 1 << 1,  // whether the variable is read only
+//         flag_pathvar = 1 << 2,    // whether the variable is a path variable
+//     };
+//     env_var_t() : env_var_t(wcstring_list_ffi_t{}, 0) {}
+//     env_var_t(const wcstring_list_ffi_t &vals, uint8_t flags);
+//     env_var_t(const env_var_t &);
+//     env_var_t(env_var_t &&) = default;
 
-    env_var_t(wcstring val, env_var_flags_t flags)
-        : env_var_t{std::vector<wcstring>{std::move(val)}, flags} {}
+//     env_var_t(wcstring val, env_var_flags_t flags)
+//         : env_var_t{std::vector<wcstring>{std::move(val)}, flags} {}
 
-    // Construct from FFI. This transfers ownership of the EnvVar, which should originate
-    // in Box::into_raw().
-    static env_var_t new_ffi(EnvVar *ptr);
+//     // Construct from FFI. This transfers ownership of the EnvVar, which should originate
+//     // in Box::into_raw().
+//     static env_var_t new_ffi(EnvVar *ptr);
 
-    // Get the underlying EnvVar pointer.
-    // Note you may need to mem::transmute this, since autocxx gets confused when going from Rust ->
-    // C++ -> Rust.
-    const EnvVar *ffi_ptr() const { return &*this->impl_; }
+//     // Get the underlying EnvVar pointer.
+//     // Note you may need to mem::transmute this, since autocxx gets confused when going from Rust
+//     ->
+//     // C++ -> Rust.
+//     const EnvVar *ffi_ptr() const { return &*this->impl_; }
 
-    bool empty() const;
-    bool exports() const;
-    bool is_read_only() const;
-    bool is_pathvar() const;
-    env_var_flags_t get_flags() const;
+//     bool empty() const;
+//     bool exports() const;
+//     bool is_read_only() const;
+//     bool is_pathvar() const;
+//     env_var_flags_t get_flags() const;
 
-    wcstring as_string() const;
-    void to_list(std::vector<wcstring> &out) const;
-    std::vector<wcstring> as_list() const;
-    wcstring_list_ffi_t as_list_ffi() const { return as_list(); }
+//     wcstring as_string() const;
+//     void to_list(std::vector<wcstring> &out) const;
+//     std::vector<wcstring> as_list() const;
+//     wcstring_list_ffi_t as_list_ffi() const { return as_list(); }
 
-    /// \return the character used when delimiting quoted expansion.
-    wchar_t get_delimiter() const;
+//     /// \return the character used when delimiting quoted expansion.
+//     wchar_t get_delimiter() const;
 
-    static env_var_flags_t flags_for(const wchar_t *name);
+//     static env_var_flags_t flags_for(const wchar_t *name);
 
-    env_var_t &operator=(const env_var_t &);
-    env_var_t &operator=(env_var_t &&) = default;
+//     env_var_t &operator=(const env_var_t &);
+//     env_var_t &operator=(env_var_t &&) = default;
 
-    bool operator==(const env_var_t &rhs) const;
-    bool operator!=(const env_var_t &rhs) const { return !(*this == rhs); }
+//     bool operator==(const env_var_t &rhs) const;
+//     bool operator!=(const env_var_t &rhs) const { return !(*this == rhs); }
 
-   private:
-    env_var_t(rust::Box<EnvVar> &&impl) : impl_(std::move(impl)) {}
+//    private:
+//     env_var_t(rust::Box<EnvVar> &&impl) : impl_(std::move(impl)) {}
 
-    rust::Box<EnvVar> impl_;
-};
-typedef std::unordered_map<wcstring, env_var_t> var_table_t;
+//     rust::Box<EnvVar> impl_;
+// };
+// typedef std::unordered_map<wcstring, env_var_t> var_table_t;
 
 /// An environment is read-only access to variable values.
-class environment_t {
-   protected:
-    environment_t() = default;
+using environment_t = EnvStackRef;
+// class environment_t {
+//    protected:
+//     environment_t() = default;
 
-   public:
-    virtual maybe_t<env_var_t> get(const wcstring &key,
-                                   env_mode_flags_t mode = ENV_DEFAULT) const = 0;
-    virtual std::vector<wcstring> get_names(env_mode_flags_t flags) const = 0;
-    virtual ~environment_t();
+//    public:
+//     virtual maybe_t<env_var_t> get(const wcstring &key,
+//                                    env_mode_flags_t mode = ENV_DEFAULT) const = 0;
+//     virtual std::vector<wcstring> get_names(env_mode_flags_t flags) const = 0;
+//     virtual ~environment_t();
 
-    maybe_t<env_var_t> get_unless_empty(const wcstring &key,
-                                        env_mode_flags_t mode = ENV_DEFAULT) const;
-    /// \return a environment variable as a unique pointer, or nullptr if none.
-    std::unique_ptr<env_var_t> get_or_null(const wcstring &key,
-                                           env_mode_flags_t mode = ENV_DEFAULT) const;
+//     maybe_t<env_var_t> get_unless_empty(const wcstring &key,
+//                                         env_mode_flags_t mode = ENV_DEFAULT) const;
+//     /// \return a environment variable as a unique pointer, or nullptr if none.
+//     std::unique_ptr<env_var_t> get_or_null(const wcstring &key,
+//                                            env_mode_flags_t mode = ENV_DEFAULT) const;
 
-    /// Returns the PWD with a terminating slash.
-    virtual wcstring get_pwd_slash() const;
-};
+//     /// Returns the PWD with a terminating slash.
+//     virtual wcstring get_pwd_slash() const;
+// };
 
-/// The null environment contains nothing.
-class null_environment_t : public environment_t {
-   public:
-    null_environment_t();
-    ~null_environment_t();
+// /// The null environment contains nothing.
+// class null_environment_t : public environment_t {
+//    public:
+//     null_environment_t();
+//     ~null_environment_t();
 
-    maybe_t<env_var_t> get(const wcstring &key, env_mode_flags_t mode = ENV_DEFAULT) const override;
-    std::vector<wcstring> get_names(env_mode_flags_t flags) const override;
+//     maybe_t<env_var_t> get(const wcstring &key, env_mode_flags_t mode = ENV_DEFAULT) const
+//     override; std::vector<wcstring> get_names(env_mode_flags_t flags) const override;
 
-   private:
-    rust::Box<EnvNull> impl_;
-};
+//    private:
+//     rust::Box<EnvNull> impl_;
+// };
 
 /// A mutable environment which allows scopes to be pushed and popped.
-class env_stack_t final : public environment_t {
-    /// \return whether we are the principal stack.
-    bool is_principal() const;
-
-   public:
-    ~env_stack_t() override;
-    env_stack_t(env_stack_t &&);
-
-    /// Implementation of environment_t.
-    maybe_t<env_var_t> get(const wcstring &key, env_mode_flags_t mode = ENV_DEFAULT) const override;
-
-    /// Implementation of environment_t.
-    std::vector<wcstring> get_names(env_mode_flags_t flags) const override;
-
-    /// Sets the variable with the specified name to the given values.
-    int set(const wcstring &key, env_mode_flags_t mode, std::vector<wcstring> vals);
-
-    /// Sets the variable with the specified name to the given values.
-    /// The values should have type const wchar_t *const * (but autocxx doesn't support that).
-    int set_ffi(const wcstring &key, env_mode_flags_t mode, const void *vals, size_t count);
-
-    /// Sets the variable with the specified name to a single value.
-    int set_one(const wcstring &key, env_mode_flags_t mode, wcstring val);
-
-    /// Sets the variable with the specified name to no values.
-    int set_empty(const wcstring &key, env_mode_flags_t mode);
-
-    /// Update the PWD variable based on the result of getcwd.
-    void set_pwd_from_getcwd();
-
-    /// Remove environment variable.
-    ///
-    /// \param key The name of the variable to remove
-    /// \param mode should be ENV_USER if this is a remove request from the user, 0 otherwise. If
-    /// this is a user request, read-only variables can not be removed. The mode may also specify
-    /// the scope of the variable that should be erased.
-    ///
-    /// \return zero if the variable existed, and non-zero if the variable did not exist
-    int remove(const wcstring &key, int mode);
-
-    /// Push the variable stack. Used for implementing local variables for functions and for-loops.
-    void push(bool new_scope);
-
-    /// Pop the variable stack. Used for implementing local variables for functions and for-loops.
-    void pop();
-
-    /// Returns an array containing all exported variables in a format suitable for execv.
-    std::shared_ptr<owning_null_terminated_array_t> export_arr();
-
-    /// Snapshot this environment. This means returning a read-only copy. Local variables are copied
-    /// but globals are shared (i.e. changes to global will be visible to this snapshot). This
-    /// returns a shared_ptr for convenience, since the most common reason to snapshot is because
-    /// you want to read from another thread.
-    std::shared_ptr<environment_t> snapshot() const;
-
-    /// Helpers to get and set the proc statuses.
-    /// These correspond to $status and $pipestatus.
-    statuses_t get_last_statuses() const;
-    int get_last_status() const;
-    void set_last_statuses(statuses_t s);
-
-    /// Sets up argv as the given list of strings.
-    void set_argv(std::vector<wcstring> argv);
-
-    /// Slightly optimized implementation.
-    wcstring get_pwd_slash() const override;
-
-    /// "Override" of get_or_null, as autocxx doesn't understand inheritance.
-    std::unique_ptr<env_var_t> get_or_null(const wcstring &key,
-                                           env_mode_flags_t mode = ENV_DEFAULT) const {
-        return environment_t::get_or_null(key, mode);
-    }
-
-    /// Synchronizes universal variable changes.
-    /// If \p always is set, perform synchronization even if there's no pending changes from this
-    /// instance (that is, look for changes from other fish instances).
-    /// \return a list of events for changed variables.
-    std::vector<rust::Box<Event>> universal_sync(bool always);
-
-    // Compatibility hack; access the "environment stack" from back when there was just one.
-    static const std::shared_ptr<env_stack_t> &principal_ref();
-    static env_stack_t &principal() { return *principal_ref(); }
-
-    // Access a variable stack that only represents globals.
-    // Do not push or pop from this.
-    static env_stack_t &globals();
-
-   private:
-    env_stack_t(rust::Box<EnvStackRef> imp);
-
-    /// The implementation. Do not access this directly.
-    rust::Box<EnvStackRef> impl_;
-};
+using env_stack_t = EnvStackRef;
 
 bool get_use_posix_spawn();
 

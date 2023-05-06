@@ -15,7 +15,7 @@ use crate::common::{
 use crate::complete::{
     CompleteFlags, Completion, CompletionList, CompletionListFfi, CompletionReceiver,
 };
-use crate::env::{EnvDynFFI, EnvVar, Environment};
+use crate::env::{EnvDynFFI, EnvStackRefFFI, EnvVar, Environment};
 use crate::exec::exec_subshell_for_expand;
 use crate::history::{history_session_id, History};
 use crate::operation_context::OperationContext;
@@ -223,7 +223,7 @@ pub fn expand_one(
 /// \return an expand error.
 pub fn expand_to_command_and_args(
     instr: &wstr,
-    ctx: &OperationContext,
+    ctx: &OperationContext<'_>,
     out_cmd: &mut WString,
     mut out_args: Option<&mut Vec<WString>>,
     errors: Option<&mut ParseErrorList>,
@@ -1657,6 +1657,8 @@ mod expand_ffi {
         type ParseErrorListFfi = crate::parse_constants::ParseErrorListFfi;
         #[cxx_name = "EnvDyn"]
         type EnvDynFFI = crate::env::EnvDynFFI;
+        #[cxx_name = "EnvStackRef"]
+        type EnvStackRefFFI = crate::env::EnvStackRefFFI;
         type CompletionListFfi = crate::complete::CompletionListFfi;
     }
 
@@ -1694,7 +1696,7 @@ mod expand_ffi {
             errors: *mut ParseErrorListFfi,
         ) -> bool;
         #[cxx_name = "expand_tilde"]
-        fn ffi_expand_tilde(input: &mut CxxWString, vars: &EnvDynFFI);
+        fn ffi_expand_tilde(input: &mut CxxWString, vars: &EnvStackRefFFI);
         #[cxx_name = "expand_string"]
         fn ffi_expand_string(
             input: &CxxWString,
@@ -1724,7 +1726,7 @@ fn ffi_expand_one(
     // ok
     todo!()
 }
-fn ffi_expand_tilde(input: &mut CxxWString, vars: &EnvDynFFI) {
+fn ffi_expand_tilde(input: &mut CxxWString, vars: &EnvStackRefFFI) {
     todo!()
 }
 fn ffi_expand_string(

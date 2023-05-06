@@ -4412,6 +4412,11 @@ unsafe impl ExternType for Ast {
     type Kind = cxx::kind::Opaque;
 }
 
+unsafe impl ExternType for DecoratedStatement {
+    type Id = type_id!("DecoratedStatement");
+    type Kind = cxx::kind::Opaque;
+}
+
 impl Ast {
     fn top_ffi(&self) -> Box<NodeFfi> {
         Box::new(NodeFfi::new(self.top.as_node()))

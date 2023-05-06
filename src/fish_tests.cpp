@@ -203,7 +203,7 @@ static bool pushd(const char *path) {
         return false;
     }
 
-    env_stack_t::principal().set_pwd_from_getcwd();
+    env_stack_principal().set_pwd_from_getcwd();
     return true;
 }
 
@@ -213,7 +213,7 @@ static void popd() {
         err(L"chdir(\"%s\") from popd() failed: errno = %d", old_cwd.c_str(), errno);
     }
     pushed_dirs.pop_back();
-    env_stack_t::principal().set_pwd_from_getcwd();
+    env_stack_principal().set_pwd_from_getcwd();
 }
 
 // Helper to return a string whose length greatly exceeds PATH_MAX.
@@ -1710,7 +1710,7 @@ static bool expand_test(const wchar_t *in, expand_flags_t flags, ...) {
     pwd_environment_t pwd{};
     operation_context_t ctx{parser_t::principal_parser().shared(), pwd, no_cancel};
 
-    if (expand_string(in, &output, flags, ctx, &*errors) == expand_result_t::error) {
+    if (expand_string(in, &output, flags, ctx, &*errors) == ExpandResultCode::error) {
         if (errors->empty()) {
             err(L"Bug: Parse error reported but no error text found.");
         } else {
@@ -1933,7 +1933,7 @@ static void test_expand_overflow() {
 
     auto res = expand_string(expansion, &output, expand_flags_t{}, ctx, &*errors);
     do_test(!errors->empty());
-    do_test(res == expand_result_t::error);
+    do_test(res == ExpandResultCode::error);
 
     parser->vars().pop();
 }
@@ -2341,7 +2341,7 @@ static void test_is_potential_path() {
     const wcstring wd = L"test/is_potential_path_test/";
     const std::vector<wcstring> wds({L".", wd});
 
-    operation_context_t ctx{env_stack_t::principal()};
+    operation_context_t ctx{env_stack_principal()};
     do_test(is_potential_path(L"al", true, wds, ctx, PATH_REQUIRE_DIR));
     do_test(is_potential_path(L"alpha/", true, wds, ctx, PATH_REQUIRE_DIR));
     do_test(is_potential_path(L"aard", true, wds, ctx, 0));
@@ -6425,7 +6425,7 @@ int main(int argc, char **argv) {
     signal_reset_handlers();
 
     // Set PWD from getcwd - fixes #5599
-    env_stack_t::principal().set_pwd_from_getcwd();
+    env_stack_principal().set_pwd_from_getcwd();
 
     for (const auto &test : s_tests) {
         if (should_test_function(test.group)) {

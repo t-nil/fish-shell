@@ -14,7 +14,7 @@ mod trace_ffi {
         include!("parser.h");
         type wcstring_list_ffi_t = super::wcstring_list_ffi_t;
         type wcharz_t = super::wcharz_t;
-        type Parser = super::Parser;
+        type Parser = crate::parser::Parser;
     }
 
     extern "Rust" {

@@ -1,6 +1,8 @@
 #ifndef FISH_OPERATION_CONTEXT_H
 #define FISH_OPERATION_CONTEXT_H
 
+#include <stddef.h>
+
 #if INCLUDE_RUST_HEADERS
 #include "operation_context.rs.h"
 #else
@@ -8,14 +10,6 @@ struct OperationContext;
 #endif
 
 using operation_context_t = OperationContext;
-
-#if 0
-#include "parser.h"
-
-struct job_group_t;
-
-/// A common helper which always returns false.
-bool no_cancel();
 
 /// Default limits for expansion.
 enum expansion_limit_t : size_t {
@@ -26,13 +20,21 @@ enum expansion_limit_t : size_t {
     kExpansionLimitBackground = 512,
 };
 
+#if 0
+#include "parser.h"
+
+struct job_group_t;
+
+/// A common helper which always returns false.
+bool no_cancel();
+
 /// A operation_context_t is a simple property bag which wraps up data needed for highlighting,
 /// expansion, completion, and more.
 class operation_context_t {
    public:
     // The parser, if this is a foreground operation. If this is a background operation, this may be
     // nullptr.
-    std::shared_ptr<parser_t> parser;
+    ParserRef parser;
 
     // The set of variables. It is the creator's responsibility to ensure this lives as log as the
     // context itself.
@@ -57,10 +59,10 @@ class operation_context_t {
 
     // \return an operation context that contains only global variables, no parser, and never
     // cancels.
-    static operation_context_t globals();
+    static operation_contextglobals();
 
     /// Construct from a full set of properties.
-    operation_context_t(std::shared_ptr<parser_t> parser, const environment_t &vars,
+    operation_context_t(ParserRef parser, const environment_t &vars,
                         cancel_checker_t cancel_checker,
                         size_t expansion_limit = kExpansionLimitDefault);
 

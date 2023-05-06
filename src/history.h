@@ -31,14 +31,28 @@ using history_identifier_t = uint64_t;
 
 struct HistoryItem;
 
-class history_search_type_t;
 class HistorySharedPtr;
 enum class PersistenceMode;
+enum class SearchDirection;
+enum class SearchType;
 
 #endif  // INCLUDE_RUST_HEADERS
 
 using history_item_t = HistoryItem;
 using history_persistence_mode_t = PersistenceMode;
+using history_search_direction_t = SearchDirection;
+using history_search_type_t = SearchType;
+using history_search_flags_t = uint32_t;
+
+/// Flags for history searching.
+enum {
+    /// If set, ignore case.
+    history_search_ignore_case = 1 << 0,
+
+    /// If set, do not deduplicate, which can help performance.
+    history_search_no_dedup = 1 << 1
+};
+using history_search_flags_t = uint32_t;
 
 #endif
 
@@ -224,16 +238,6 @@ class history_t : noncopyable_t, nonmovable_t {
     size_t size();
 };
 */
-
-/// Flags for history searching.
-enum {
-    /// If set, ignore case.
-    history_search_ignore_case = 1 << 0,
-
-    /// If set, do not deduplicate, which can help performance.
-    history_search_no_dedup = 1 << 1
-};
-using history_search_flags_t = uint32_t;
 
 using history_search_t = HistorySearch;
 

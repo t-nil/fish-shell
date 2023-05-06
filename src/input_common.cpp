@@ -129,12 +129,12 @@ void update_wait_on_escape_ms(const environment_t& vars) {
         return;
     }
 
-    long tmp = fish_wcstol(escape_time_ms->as_string().c_str());
+    long tmp = fish_wcstol(escape_time_ms->as_string()->c_str());
     if (errno || tmp < 10 || tmp >= 5000) {
         std::fwprintf(stderr,
                       L"ignoring fish_escape_delay_ms: value '%ls' "
                       L"is not an integer or is < 10 or >= 5000 ms\n",
-                      escape_time_ms->as_string().c_str());
+                      escape_time_ms->as_string()->c_str());
     } else {
         wait_on_escape_ms = static_cast<int>(tmp);
     }

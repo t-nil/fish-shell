@@ -28,7 +28,6 @@ class io_chain_t;
 struct Event;
 struct job_group_t;
 struct parser_t;
-class env_stack_t;
 
 /// Types of blocks.
 enum class block_type_t : uint8_t {
@@ -481,7 +480,7 @@ struct parser_t : public std::enable_shared_from_this<parser_t> {
     void set_syncs_uvars(bool flag) { syncs_uvars_ = flag; }
 
     /// \return a shared pointer reference to this parser.
-    std::shared_ptr<parser_t> shared();
+    ParserRef shared();
 
     /// \return a cancel poller for checking if this parser has been signalled.
     /// autocxx falls over with this so hide it.

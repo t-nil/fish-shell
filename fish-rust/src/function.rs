@@ -14,8 +14,10 @@ use crate::parser_keywords::parser_keywords_is_reserved;
 use crate::pointer::ConstPointer;
 use crate::wchar::{wstr, WString, L};
 use crate::wchar_ext::WExt;
+use crate::wchar_ffi::AsWstr;
 use crate::wutil::DirIter;
 use crate::{ast, event};
+use cxx::CxxWString;
 use once_cell::sync::Lazy;
 use printf_compat::sprintf;
 use std::collections::{HashMap, HashSet};
@@ -237,10 +239,7 @@ pub fn function_get_props(name: &wstr) -> Option<FunctionPropertiesRef> {
 }
 
 /// \return the properties for a function, or nullptr if none, perhaps triggering autoloading.
-pub fn function_get_props_autoload(
-    name: &wstr,
-    parser: & Parser,
-) -> Option<FunctionPropertiesRef> {
+pub fn function_get_props_autoload(name: &wstr, parser: &Parser) -> Option<FunctionPropertiesRef> {
     parser.assert_can_execute();
     if parser_keywords_is_reserved(name) {
         return None;
@@ -254,7 +253,7 @@ pub fn function_get_props_autoload(
 /// Make sure that if the specified function is a dynamically loaded function, it has been fully
 /// loaded.
 /// Note this executes fish script code.
-pub fn function_load(name: &wstr, parser: & Parser) -> bool {
+pub fn function_load(name: &wstr, parser: &Parser) -> bool {
     parser.assert_can_execute();
     let mut path_to_autoload = None;
     // Note we can't autoload while holding the funcset lock.
@@ -284,7 +283,7 @@ pub fn function_load(name: &wstr, parser: & Parser) -> bool {
 
 /// Sets the description of the function with the name \c name.
 /// This triggers autoloading.
-pub fn function_set_desc(name: &wstr, desc: &wstr, parser: & Parser) {
+pub fn function_set_desc(name: &wstr, desc: &wstr, parser: &Parser) {
     parser.assert_can_execute();
     function_load(name, parser);
     let mut funcset = FUNCTION_SET.lock().unwrap();
@@ -299,7 +298,7 @@ pub fn function_set_desc(name: &wstr, desc: &wstr, parser: & Parser) {
 
 /// Returns true if the function named \p cmd exists.
 /// This may autoload.
-pub fn function_exists(cmd: &wstr, parser: & Parser) -> bool {
+pub fn function_exists(cmd: &wstr, parser: &Parser) -> bool {
     parser.assert_can_execute();
     if !valid_func_name(cmd) {
         return false;
@@ -322,6 +321,10 @@ pub fn function_exists_no_autoload(cmd: &wstr) -> bool {
     funcset.get_props(cmd).is_some() || funcset.autoloader.can_autoload(cmd)
 }
 
+fn function_exists_no_autoload_ffi(cmd: &CxxWString) -> bool {
+    function_exists_no_autoload(cmd.as_wstr())
+}
+
 /// Returns all function names.
 ///
 /// \param get_hidden whether to include hidden functions, i.e. ones starting with an underscore.
@@ -341,7 +344,7 @@ pub fn function_get_names(get_hidden: bool) -> Vec<WString> {
 
 /// Creates a new function using the same definition as the specified function. Returns true if copy
 /// is successful.
-pub fn function_copy(name: &wstr, new_name: WString, parser: & Parser) -> bool {
+pub fn function_copy(name: &wstr, new_name: WString, parser: &Parser) -> bool {
     let filename = parser.current_filename();
     let lineno = parser.get_lineno();
 
@@ -491,4 +494,12 @@ fn get_function_body_source(props: &FunctionProperties) -> WString {
         return props.parsed_source.as_ref().unwrap().src[body_start..body_end].to_owned();
     }
     WString::new()
+}
+
+#[cxx::bridge]
+mod function_ffi {
+    extern "Rust" {
+        fn function_invalidate_path();
+        fn function_exists_no_autoload_ffi(cmd: &CxxWString) -> bool;
+    }
 }
