@@ -1,3 +1,4 @@
+#if 0                // todo!
 // Functions used for implementing the complete builtin.
 #include "config.h"  // IWYU pragma: keep
 
@@ -123,7 +124,7 @@ static void builtin_complete_print(const wcstring &cmd, io_streams_t &streams, p
     // colorize if interactive
     if (!streams.out_is_redirected && isatty(STDOUT_FILENO)) {
         std::vector<highlight_spec_t> colors;
-        highlight_shell(repr, colors, parser.context());
+        highlight_shell(repr, colors, *rust::Box<OperationContext>::from_raw(parser.context()));
         streams.out.append(str2wcstring(colorize(repr, colors, parser.vars())));
     } else {
         streams.out.append(repr);
@@ -385,22 +386,23 @@ maybe_t<int> builtin_complete(parser_t &parser, io_streams_t &streams, const wch
 
         // Create a scoped transient command line, so that builtin_commandline will see our
         // argument, not the reader buffer.
-        parser.libdata().transient_commandlines.push_back(do_complete_param);
-        cleanup_t remove_transient([&] { parser.libdata().transient_commandlines.pop_back(); });
+        parser.libdata_mut().transient_commandlines_push(do_complete_param);
+        cleanup_t remove_transient([&] { parser.libdata_mut().transient_commandlines_pop(); });
 
         // Prevent accidental recursion (see #6171).
-        if (!parser.libdata().builtin_complete_current_commandline) {
+        if (!parser.libdata_pods().builtin_complete_current_commandline) {
             if (!have_do_complete_param) {
-                parser.libdata().builtin_complete_current_commandline = true;
+                parser.libdata_pods_mut().builtin_complete_current_commandline = true;
             }
 
             completion_list_t comp = complete(
                 do_complete_param, completion_request_options_t::normal(), parser.context());
 
             // Apply the same sort and deduplication treatment as pager completions
-            completions_sort_and_prioritize(&comp);
+            comp.sort_and_prioritize();
 
-            for (const auto &next : comp) {
+            for (size_t i = 0; i < comp.size(); i++) {
+                const auto &next = comp.at(i);
                 // Make a fake commandline, and then apply the completion to it.
                 const wcstring faux_cmdline = token;
                 size_t tmp_cursor = faux_cmdline.size();
@@ -434,7 +436,7 @@ maybe_t<int> builtin_complete(parser_t &parser, io_streams_t &streams, const wch
                 streams.out.append(faux_cmdline_with_completion);
             }
 
-            parser.libdata().builtin_complete_current_commandline = false;
+            parser.libdata_pods_mut().builtin_complete_current_commandline = false;
         }
     } else if (path.empty() && gnu_opt.empty() && short_opt.empty() && old_opt.empty() && !remove &&
                !*comp && !*desc && condition.empty() && wrap_targets.empty() &&
@@ -474,3 +476,4 @@ maybe_t<int> builtin_complete(parser_t &parser, io_streams_t &streams, const wch
 
     return STATUS_CMD_OK;
 }
+#endif

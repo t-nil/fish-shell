@@ -202,13 +202,13 @@ static wcstring input_get_bind_mode(const environment_t &vars) {
 }
 
 /// Set the current bind mode.
-static void input_set_bind_mode(parser_t &parser, const wcstring &bm) {
+static void input_set_bind_mode(const parser_t &parser, const wcstring &bm) {
     // Only set this if it differs to not execute variable handlers all the time.
     // modes may not be empty - empty is a sentinel value meaning to not change the mode
     assert(!bm.empty());
     if (input_get_bind_mode(parser.vars()) != bm) {
         // Must send events here - see #6653.
-        parser.set_var_and_fire(FISH_BIND_MODE_VAR, ENV_GLOBAL, {bm});
+        parser.set_var_and_fire(FISH_BIND_MODE_VAR, ENV_GLOBAL, wcstring_list_ffi_t{{bm}});
     }
 }
 

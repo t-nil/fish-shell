@@ -119,7 +119,7 @@ bool builtin_bind_t::list_one(const wcstring &seq, const wcstring &bind_mode, bo
 
     if (!streams.out_is_redirected && isatty(STDOUT_FILENO)) {
         std::vector<highlight_spec_t> colors;
-        highlight_shell(out, colors, parser.context());
+        highlight_shell(out, colors, rust::Box<OperationContext>::from_raw(parser.context()));
         streams.out.append(str2wcstring(colorize(out, colors, parser.vars())));
     } else {
         streams.out.append(out);

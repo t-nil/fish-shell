@@ -303,7 +303,7 @@ maybe_t<int> builtin_commandline(parser_t &parser, io_streams_t &streams, const 
                 // Don't enqueue a repaint if we're currently in the middle of one,
                 // because that's an infinite loop.
                 if (mc == rl::repaint_mode || mc == rl::force_repaint || mc == rl::repaint) {
-                    if (ld.is_repaint) continue;
+                    if (parser().libdata_pods().is_repaint) continue;
                 }
 
                 // HACK: Execute these right here and now so they can affect any insertions/changes
@@ -425,8 +425,8 @@ maybe_t<int> builtin_commandline(parser_t &parser, io_streams_t &streams, const 
     if (override_buffer) {
         current_buffer = override_buffer;
         current_cursor_pos = std::wcslen(current_buffer);
-    } else if (!ld.transient_commandlines.empty() && !cursor_mode) {
-        transient = ld.transient_commandlines.back();
+    } else if (!ld.transient_commandlines_empty() && !cursor_mode) {
+        transient = *ld.transient_commandlines_back();
         current_buffer = transient.c_str();
         current_cursor_pos = transient.size();
     } else if (rstate.initialized) {

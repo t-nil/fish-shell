@@ -58,7 +58,7 @@ using readb_result_t = int;
 
 static readb_result_t readb(int in_fd) {
     assert(in_fd >= 0 && "Invalid in fd");
-    universal_notifier_t& notifier = default_notifier();
+    rust::Box<UniversalNotifierFFI> notifier = default_notifier();
     auto fdset_box = new_fd_readable_set();
     fd_readable_set_t& fdset = *fdset_box;
     for (;;) {
@@ -70,13 +70,13 @@ static readb_result_t readb(int in_fd) {
         fdset.add(ioport_fd);
 
         // Get the uvar notifier fd (possibly none).
-        int notifier_fd = notifier.notification_fd();
+        int notifier_fd = notifier->notification_fd();
         fdset.add(notifier_fd);
 
         // Get its suggested delay (possibly none).
         // Note a 0 here means do not poll.
         uint64_t timeout = kNoTimeout;
-        if (uint64_t usecs_delay = notifier.usec_delay_between_polls()) {
+        if (uint64_t usecs_delay = notifier->usec_delay_between_polls()) {
             timeout = usecs_delay;
         }
 
@@ -96,8 +96,8 @@ static readb_result_t readb(int in_fd) {
         // The priority order is: uvars, stdin, ioport.
         // Check to see if we want a universal variable barrier.
         // This may come about through readability, or through a call to poll().
-        if ((fdset.test(notifier_fd) && notifier.notification_fd_became_readable(notifier_fd)) ||
-            notifier.poll()) {
+        if ((fdset.test(notifier_fd) && notifier->notification_fd_became_readable(notifier_fd)) ||
+            notifier->poll()) {
             return readb_uvar_notified;
         }
 

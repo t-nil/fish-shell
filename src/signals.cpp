@@ -1,3 +1,4 @@
+#if 0
 // The library for various signal related issues.
 #include "config.h"  // IWYU pragma: keep
 
@@ -45,3 +46,4 @@ void sigchecker_t::wait() const {
     gens.at_mut(topic_) = this->gen_;
     tm.check(&gens, true /* wait */);
 }
+#endif

@@ -1362,8 +1362,8 @@ void completer_t::complete_custom(const wcstring &cmd, const wcstring &cmdline,
     maybe_t<cleanup_t> remove_transient{};
     bool wants_transient = (ad->wrap_depth > 0 || ad->var_assignments) && !is_autosuggest;
     if (wants_transient) {
-        ctx.parser->libdata().transient_commandlines.push_back(cmdline);
-        remove_transient.emplace([=] { ctx.parser->libdata().transient_commandlines.pop_back(); });
+        ctx.parser->libdata().transient_commandlines_push(cmdline);
+        remove_transient.emplace([=] { ctx.parser->libdata_mut().transient_commandlines_pop(); });
     }
 
     // Maybe apply variable assignments.

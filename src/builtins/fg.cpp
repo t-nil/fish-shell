@@ -127,13 +127,13 @@ maybe_t<int> builtin_fg(parser_t &parser, io_streams_t &streams, const wchar_t *
         int res = tcsetattr(STDIN_FILENO, TCSADRAIN, termios);
         if (res < 0) wperror(L"tcsetattr");
     }
-    tty_transfer_t transfer;
-    transfer.to_job_group(job->group);
+    rust::Box<TtyTransfer> transfer = new_tty_transfer();
+    transfer->to_job_group(job->group);
     bool resumed = job->resume();
     if (resumed) {
         job->continue_job(parser);
     }
-    if (job->is_stopped()) transfer.save_tty_modes();
-    transfer.reclaim();
+    if (job->is_stopped()) transfer->save_tty_modes();
+    transfer->reclaim();
     return resumed ? STATUS_CMD_OK : STATUS_CMD_ERROR;
 }

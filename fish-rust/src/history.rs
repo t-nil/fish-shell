@@ -91,7 +91,7 @@ mod history_ffi {
         #[cxx_name = "history_save_all"]
         fn save_all();
         #[cxx_name = "history_session_id"]
-        fn rust_session_id(vars: &EnvDynFFI) -> UniquePtr<CxxWString>;
+        fn rust_session_id(vars: &EnvStackRefFFI) -> UniquePtr<CxxWString>;
         fn rust_expand_and_detect_paths(
             paths: &wcstring_list_ffi_t,
             vars: &EnvDynFFI,
@@ -787,8 +787,8 @@ fn rust_history_search_new(
     ))
 }
 
-fn rust_session_id(vars: &EnvDynFFI) -> UniquePtr<CxxWString> {
-    history_session_id(&vars.0).to_ffi()
+fn rust_session_id(vars: &EnvStackRefFFI) -> UniquePtr<CxxWString> {
+    history_session_id(&*vars.0).to_ffi()
 }
 
 fn rust_expand_and_detect_paths(

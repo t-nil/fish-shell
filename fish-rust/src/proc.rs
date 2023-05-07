@@ -1800,10 +1800,29 @@ mod proc_ffi {
 
         fn new_job_group_ref() -> Box<JobGroupRefFfi>;
         fn job_reap(parser: &Parser, allow_interactive: bool) -> bool;
+        fn is_interactive_session() -> bool;
+    }
+    extern "Rust" {
+        type TtyTransfer;
+        fn new_tty_transfer() -> Box<TtyTransfer>;
+        #[cxx_name = "to_job_group"]
+        fn to_job_group_ffi(&mut self, jg: &JobGroupRefFfi);
+        fn save_tty_modes(&mut self);
+        fn reclaim(&mut self);
     }
 }
 
 fn new_job_group_ref() -> Box<JobGroupRefFfi> {
     todo!()
     // Box::new(JobGroupRefFfi(JobGroupRef
+}
+
+fn new_tty_transfer() -> Box<TtyTransfer> {
+    Box::new(TtyTransfer::new())
+}
+
+impl TtyTransfer {
+    fn to_job_group_ffi(&mut self, jg: &JobGroupRefFfi) {
+        self.to_job_group(&jg.0);
+    }
 }

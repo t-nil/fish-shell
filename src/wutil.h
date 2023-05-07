@@ -46,6 +46,7 @@ struct wcstring_list_ffi_t {
     /* implicit */ wcstring_list_ffi_t(std::vector<wcstring> vals) : vals(std::move(vals)) {}
     ~wcstring_list_ffi_t();
 
+    bool empty() const { return vals.empty(); }
     size_t size() const { return vals.size(); }
     const wcstring &at(size_t idx) const { return vals.at(idx); }
     void clear() { vals.clear(); }

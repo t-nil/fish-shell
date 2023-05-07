@@ -45,6 +45,7 @@ fn main() -> miette::Result<()> {
         "src/env/env_ffi.rs",
         "src/env_universal_common.rs",
         "src/event.rs",
+        "src/exec.rs",
         "src/expand.rs",
         "src/fd_monitor.rs",
         "src/fd_readable_set.rs",

@@ -524,6 +524,7 @@ mod function_ffi {
         ) -> Box<FunctionPropertiesRefFFI>;
 
         fn function_invalidate_path();
+        #[cxx_name = "function_exists_no_autoload"]
         fn function_exists_no_autoload_ffi(cmd: &CxxWString) -> bool;
         #[cxx_name = "function_add"]
         fn ffi_function_add(name: &CxxWString, props: &FunctionPropertiesRefFFI);

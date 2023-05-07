@@ -828,7 +828,7 @@ class reader_data_t : public std::enable_shared_from_this<reader_data_t> {
     const env_stack_t &vars() const { return parser_ref->deref().vars(); }
 
     /// Access the parser.
-    const parser_t &parser() const { return parser_ref->deref(); }
+    parser_t &parser() const { return parser_ref->deref(); }
 
     /// Convenience cover over exec_count().
     uint64_t exec_count() const { return parser().libdata().exec_count(); }
@@ -836,7 +836,7 @@ class reader_data_t : public std::enable_shared_from_this<reader_data_t> {
     reader_data_t(rust::Box<ParserRef> parser, HistorySharedPtr &hist, reader_config_t &&conf)
         : conf(std::move(conf)),
           parser_ref(std::move(parser)),
-          inputter(parser_ref->shared(), conf.in),
+          inputter(parser_ref->deref().shared(), conf.in),
           history(hist.clone()) {}
 
     void update_buff_pos(editable_line_t *el, maybe_t<size_t> new_pos = none_t());
@@ -1325,7 +1325,7 @@ static history_pager_result_t history_pager_search(const HistorySharedPtr &histo
     if (direction == history_search_direction_t::Forward) {
         completions->reverse();
     }
-    return {completions, last_index, search->go_to_next_match(direction)};
+    return {std::move(completions), last_index, search->go_to_next_match(direction)};
 }
 
 void reader_data_t::fill_history_pager(bool new_search, history_search_direction_t direction) {
@@ -1384,7 +1384,7 @@ void reader_data_t::pager_selection_changed() {
         new_cmd_line = this->cycle_command_line;
     } else {
         new_cmd_line =
-            completion_apply_to_command_line(completion->completion, completion->flags,
+            completion_apply_to_command_line(*completion->completion(), completion->flags(),
                                              this->cycle_command_line, &cursor_pos, false);
     }
 
@@ -1410,14 +1410,17 @@ maybe_t<abbrs_replacement_t> expand_replacer(SourceRange range, const wcstring &
     cmd.push_back(L' ');
     cmd.append(escape_string(token));
 
-    scoped_push<bool> not_interactive(&parser.libdata().is_interactive, false);
+    // todo! scoped push
+    bool is_interactive = parser().libdata_pods().is_interactive;
+    parser().libdata_pods_mut().is_interactive = false;
+    cleanup_t not_interactive{[&] { parser().libdata_pods_mut().is_interactive = is_interactive; }};
 
-    std::vector<wcstring> outputs{};
+    wcstring_list_ffi_t outputs{};
     int ret = exec_subshell(cmd, parser, outputs, false /* not apply_exit_status */);
     if (ret != STATUS_CMD_OK) {
         return none();
     }
-    wcstring result = join_strings(outputs, L'\n');
+    wcstring result = join_strings(outputs.vals, L'\n');
     FLOGF(abbrs, L"Expanded function abbreviation <%ls> -> <%ls>", token.c_str(), result.c_str());
     return abbrs_replacement_from(range, result, *repl.set_cursor_marker, repl.has_cursor_marker);
 }
@@ -1548,8 +1551,15 @@ int reader_test_and_clear_interrupted() {
 void reader_write_title(const wcstring &cmd, parser_t &parser, bool reset_cursor_position) {
     if (!term_supports_setting_title()) return;
 
-    scoped_push<bool> noninteractive{&parser.libdata().is_interactive, false};
-    scoped_push<bool> in_title(&parser.libdata().suppress_fish_trace, true);
+    // todo! scoped push
+    bool is_interactive = parser().libdata_pods().is_interactive;
+    parser().libdata_pods_mut().is_interactive = false;
+    cleanup_t noninteractive{[&] { parser().libdata_pods_mut().is_interactive = is_interactive; }};
+    // todo! scoped push
+    bool suppress_fish_trace = parser().libdata_pods().suppress_fish_trace;
+    parser().libdata_pods_mut().suppress_fish_trace = false;
+    cleanup_t in_title{
+        [&] { parser().libdata_pods_mut().suppress_fish_trace = suppress_fish_trace; }};
 
     wcstring fish_title_command = DEFAULT_TITLE;
     if (function_exists(L"fish_title", parser)) {
@@ -1560,11 +1570,11 @@ void reader_write_title(const wcstring &cmd, parser_t &parser, bool reset_cursor
         }
     }
 
-    std::vector<wcstring> lst;
+    wcstring_list_ffi_t lst;
     (void)exec_subshell(fish_title_command, parser, lst, false /* ignore exit status */);
     if (!lst.empty()) {
         wcstring title_line = L"\x1B]0;";
-        for (const auto &i : lst) {
+        for (const auto &i : lst.vals) {
             title_line += i;
         }
         title_line += L"\a";
@@ -1582,11 +1592,11 @@ void reader_write_title(const wcstring &cmd, parser_t &parser, bool reset_cursor
 void reader_data_t::exec_mode_prompt() {
     mode_prompt_buff.clear();
     if (function_exists(MODE_PROMPT_FUNCTION_NAME, parser())) {
-        std::vector<wcstring> mode_indicator_list;
+        wcstring_list_ffi_t mode_indicator_list;
         exec_subshell(MODE_PROMPT_FUNCTION_NAME, parser(), mode_indicator_list, false);
         // We do not support multiple lines in the mode indicator, so just concatenate all of
         // them.
-        for (const auto &i : mode_indicator_list) {
+        for (const auto &i : mode_indicator_list.vals) {
             mode_prompt_buff += i;
         }
     }
@@ -1599,7 +1609,11 @@ void reader_data_t::exec_prompt() {
     right_prompt_buff.clear();
 
     // Suppress fish_trace while in the prompt.
-    scoped_push<bool> in_prompt(&parser().libdata().suppress_fish_trace, true);
+    // todo! use scoped_push
+    bool suppress_fish_trace = parser().libdata_pods().suppress_fish_trace;
+    parser().libdata_pods_mut().suppress_fish_trace = true;
+    cleanup_t in_prompt{
+        [&] { parser().libdata_pods_mut().suppress_fish_trace = suppress_fish_trace; }};
 
     // Update the termsize now.
     // This allows prompts to react to $COLUMNS.
@@ -1608,14 +1622,15 @@ void reader_data_t::exec_prompt() {
     // If we have any prompts, they must be run non-interactively.
     if (!conf.left_prompt_cmd.empty() || !conf.right_prompt_cmd.empty()) {
         // todo! scoped push
-        bool is_interactive = parser().libdata().pods.is_interactive;
-        parser().libdata_pod_mut().is_interactive = false;
+        bool is_interactive = parser().libdata_pods().is_interactive;
+        parser().libdata_pods_mut().is_interactive = false;
+        cleanup_t interactive{[&] { parser().libdata_pods_mut().is_interactive = is_interactive; }};
 
         exec_mode_prompt();
 
         if (!conf.left_prompt_cmd.empty()) {
             // Status is ignored.
-            std::vector<wcstring> prompt_list;
+            wcstring_list_ffi_t prompt_list;
             // Historic compatibility hack.
             // If the left prompt function is deleted, then use a default prompt instead of
             // producing an error.
@@ -1623,21 +1638,20 @@ void reader_data_t::exec_prompt() {
                                        !function_exists(conf.left_prompt_cmd, parser());
             exec_subshell(left_prompt_deleted ? DEFAULT_PROMPT : conf.left_prompt_cmd, parser(),
                           prompt_list, false);
-            left_prompt_buff = join_strings(prompt_list, L'\n');
+            left_prompt_buff = join_strings(prompt_list.vals, L'\n');
         }
 
         if (!conf.right_prompt_cmd.empty()) {
             if (function_exists(conf.right_prompt_cmd, parser())) {
                 // Status is ignored.
-                std::vector<wcstring> prompt_list;
+                wcstring_list_ffi_t prompt_list;
                 exec_subshell(conf.right_prompt_cmd, parser(), prompt_list, false);
                 // Right prompt does not support multiple lines, so just concatenate all of them.
-                for (const auto &i : prompt_list) {
+                for (const auto &i : prompt_list.vals) {
                     right_prompt_buff += i;
                 }
             }
         }
-        parser().libdata_mut().is_interactive = is_interactive;
     }
 
     // Write the screen title. Do not reset the cursor position: exec_prompt is called when there
@@ -1646,7 +1660,7 @@ void reader_data_t::exec_prompt() {
     reader_write_title(L"", parser(), false);
 
     // Some prompt may have requested an exit (#8033).
-    this->exit_loop_requested |= parser().libdata().exit_current_script;
+    this->exit_loop_requested |= parser().libdata_pods().exit_current_script;
     parser().libdata().exit_current_script = false;
 }
 

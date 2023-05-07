@@ -138,12 +138,12 @@ void env_dispatch_init(const environment_t &vars) {
 static void handle_timezone(const wchar_t *env_var_name, const environment_t &vars) {
     const auto var = vars.get_unless_empty(env_var_name);
     FLOGF(env_dispatch, L"handle_timezone() current timezone var: |%ls| => |%ls|", env_var_name,
-          !var ? L"MISSING/EMPTY" : var->as_string().c_str());
+          !var ? L"MISSING/EMPTY" : var->as_string()->c_str());
     std::string name = wcs2zstring(env_var_name);
     if (!var) {
         unsetenv_lock(name.c_str());
     } else {
-        const std::string value = wcs2zstring(var->as_string());
+        const std::string value = wcs2zstring(*var->as_string());
         setenv_lock(name.c_str(), value.c_str(), 1);
     }
     tzset();
@@ -152,7 +152,7 @@ static void handle_timezone(const wchar_t *env_var_name, const environment_t &va
 /// Update the value of g_fish_emoji_width
 static void guess_emoji_width(const environment_t &vars) {
     if (auto width_str = vars.get(L"fish_emoji_width")) {
-        int new_width = fish_wcstol(width_str->as_string().c_str());
+        int new_width = fish_wcstol(width_str->as_string()->c_str());
         g_fish_emoji_width = std::min(2, std::max(1, new_width));
         FLOGF(term_support, "'fish_emoji_width' preference: %d, overwriting default",
               g_fish_emoji_width);
@@ -161,12 +161,12 @@ static void guess_emoji_width(const environment_t &vars) {
 
     wcstring term;
     if (auto term_var = vars.get(L"TERM_PROGRAM")) {
-        term = term_var->as_string();
+        term = *term_var->as_string();
     }
 
     double version = 0;
     if (auto version_var = vars.get(L"TERM_PROGRAM_VERSION")) {
-        std::string narrow_version = wcs2zstring(version_var->as_string());
+        std::string narrow_version = wcs2zstring(*version_var->as_string());
         version = strtod(narrow_version.c_str(), nullptr);
     }
 
@@ -207,22 +207,22 @@ static void handle_fish_term_change(const env_stack_t &vars) {
 static void handle_change_ambiguous_width(const env_stack_t &vars) {
     int new_width = 1;
     if (auto width_str = vars.get(L"fish_ambiguous_width")) {
-        new_width = fish_wcstol(width_str->as_string().c_str());
+        new_width = fish_wcstol(width_str->as_string()->c_str());
     }
     g_fish_ambiguous_width = std::max(0, new_width);
 }
 
 static void handle_term_size_change(const env_stack_t &vars) {
-    handle_columns_lines_var_change_ffi(env_vars);
+    handle_columns_lines_var_change_ffi(vars);
 }
 
 static void handle_fish_history_change(const env_stack_t &vars) {
-    reader_change_history(history_session_id(vars));
+    reader_change_history(*history_session_id(vars));
 }
 
 static void handle_fish_cursor_selection_mode_change(const env_stack_t &vars) {
     auto mode = vars.get(L"fish_cursor_selection_mode");
-    reader_change_cursor_selection_mode(mode && mode->as_string() == L"inclusive"
+    reader_change_cursor_selection_mode(mode && *mode->as_string() == L"inclusive"
                                             ? cursor_selection_mode_t::inclusive
                                             : cursor_selection_mode_t::exclusive);
 }
@@ -281,7 +281,7 @@ static void handle_fish_use_posix_spawn_change(const environment_t &vars) {
     if (!allow_use_posix_spawn()) {
         g_use_posix_spawn = false;
     } else if (auto var = vars.get(L"fish_use_posix_spawn")) {
-        g_use_posix_spawn = var->empty() || bool_from_string(var->as_string());
+        g_use_posix_spawn = var->is_empty() || bool_from_string(*var->as_string());
     } else {
         g_use_posix_spawn = true;
     }
@@ -370,11 +370,11 @@ static void update_fish_color_support(const environment_t &vars) {
     bool support_term256 = false;
     bool support_term24bit = false;
 
-    if (auto term_var = vars.get(L"TERM")) term = term_var->as_string();
+    if (auto term_var = vars.get(L"TERM")) term = *term_var->as_string();
 
     if (auto fish_term256 = vars.get(L"fish_term256")) {
         // $fish_term256
-        support_term256 = bool_from_string(fish_term256->as_string());
+        support_term256 = bool_from_string(*fish_term256->as_string());
         FLOGF(term_support, L"256 color support determined by '$fish_term256'");
     } else if (term.find(L"256color") != wcstring::npos) {
         // TERM is *256color*: 256 colors explicitly supported
@@ -393,7 +393,7 @@ static void update_fish_color_support(const environment_t &vars) {
 
     // Handle $fish_term24bit
     if (auto fish_term24bit = vars.get(L"fish_term24bit")) {
-        support_term24bit = bool_from_string(fish_term24bit->as_string());
+        support_term24bit = bool_from_string(*fish_term24bit->as_string());
         FLOGF(term_support, L"'fish_term24bit' preference: 24-bit color %ls",
               support_term24bit ? L"enabled" : L"disabled");
     } else {
@@ -411,9 +411,9 @@ static void update_fish_color_support(const environment_t &vars) {
         } else {
             if (auto ct = vars.get(L"COLORTERM")) {
                 // If someone set $COLORTERM, that's the sort of color they want.
-                if (ct->as_string() == L"truecolor" || ct->as_string() == L"24bit") {
+                if (*ct->as_string() == L"truecolor" || *ct->as_string() == L"24bit") {
                     FLOGF(term_support, L"Truecolor support: Enabling per $COLORTERM='%ls'",
-                          ct->as_string().c_str());
+                          ct->as_string()->c_str());
                     support_term24bit = true;
                 }
             } else if (vars.get(L"KONSOLE_VERSION") || vars.get(L"KONSOLE_PROFILE_NAME")) {
@@ -425,7 +425,7 @@ static void update_fish_color_support(const environment_t &vars) {
                 // Supporting versions of iTerm include a colon here.
                 // We assume that if this is iTerm, it can't also be st, so having this check
                 // inside is okay.
-                if (it->as_string().find(L':') != wcstring::npos) {
+                if (it->as_string()->find(L':') != wcstring::npos) {
                     FLOGF(term_support, L"Truecolor support: Enabling for ITERM");
                     support_term24bit = true;
                 }
@@ -433,9 +433,9 @@ static void update_fish_color_support(const environment_t &vars) {
                 FLOGF(term_support, L"Truecolor support: Enabling for st");
                 support_term24bit = true;
             } else if (auto vte = vars.get(L"VTE_VERSION")) {
-                if (fish_wcstod(vte->as_string(), nullptr) > 3600) {
+                if (fish_wcstod(*vte->as_string(), nullptr) > 3600) {
                     FLOGF(term_support, L"Truecolor support: Enabling for VTE version %ls",
-                          vte->as_string().c_str());
+                          vte->as_string()->c_str());
                     support_term24bit = true;
                 }
             }
@@ -458,7 +458,7 @@ static void initialize_curses_using_fallbacks(const environment_t &vars) {
     wcstring termstr = L"";
     auto term_var = vars.get_unless_empty(L"TERM");
     if (term_var) {
-        termstr = term_var->as_string();
+        termstr = *term_var->as_string();
     }
 
     for (const wchar_t *fallback : fallbacks) {
@@ -546,7 +546,7 @@ static bool does_term_support_setting_title(const environment_t &vars) {
     const auto term_var = vars.get_unless_empty(L"TERM");
     if (!term_var) return false;
 
-    const wcstring term_str = term_var->as_string();
+    const wcstring term_str = std::move(*term_var->as_string());
     const wchar_t *term = term_str.c_str();
     bool recognized = contains(title_terms, term_var->as_string());
     if (!recognized) recognized = !std::wcsncmp(term, L"xterm-", const_strlen(L"xterm-"));
@@ -580,12 +580,12 @@ void env_cleanup() {
 static void init_curses(const environment_t &vars) {
     for (const auto &var_name : curses_variables) {
         std::string name = wcs2zstring(var_name);
-        const auto var = vars.get_unless_empty(var_name, ENV_EXPORT);
+        const auto var = vars.getf_unless_empty(var_name, ENV_EXPORT);
         if (!var) {
             FLOGF(term_support, L"curses var %s missing or empty", name.c_str());
             unsetenv_lock(name.c_str());
         } else {
-            std::string value = wcs2zstring(var->as_string());
+            std::string value = wcs2zstring(*var->as_string());
             FLOGF(term_support, L"curses var %s='%s'", name.c_str(), value.c_str());
             setenv_lock(name.c_str(), value.c_str(), 1);
         }
@@ -604,7 +604,7 @@ static void init_curses(const environment_t &vars) {
                 FLOGF(warning, _(L"TERM environment variable not set."));
             } else {
                 FLOGF(warning, _(L"TERM environment variable set to '%ls'."),
-                      term->as_string().c_str());
+                      term->as_string()->c_str());
                 FLOGF(warning, _(L"Check that this terminal type is supported on this system."));
             }
         }
@@ -634,13 +634,13 @@ static void init_locale(const environment_t &vars) {
     char *old_msg_locale = strdup(setlocale(LC_MESSAGES, nullptr));
 
     for (const auto &var_name : locale_variables) {
-        const auto var = vars.get_unless_empty(var_name, ENV_EXPORT);
+        const auto var = vars.getf_unless_empty(var_name, ENV_EXPORT);
         std::string name = wcs2zstring(var_name);
         if (!var) {
             FLOGF(env_locale, L"locale var %s missing or empty", name.c_str());
             unsetenv_lock(name.c_str());
         } else {
-            const std::string value = wcs2zstring(var->as_string());
+            const std::string value = wcs2zstring(*var->as_string());
             FLOGF(env_locale, L"locale var %s='%s'", name.c_str(), value.c_str());
             setenv_lock(name.c_str(), value.c_str(), 1);
         }
@@ -653,7 +653,7 @@ static void init_locale(const environment_t &vars) {
     // So we try *really really really hard* to not have one.
     bool fix_locale = true;
     if (auto allow_c = vars.get_unless_empty(L"fish_allow_singlebyte_locale")) {
-        fix_locale = !bool_from_string(allow_c->as_string());
+        fix_locale = !bool_from_string(*allow_c->as_string());
     }
     if (fix_locale && MB_CUR_MAX == 1) {
         FLOGF(env_locale, L"Have singlebyte locale, trying to fix");

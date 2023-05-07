@@ -38,6 +38,11 @@ mod signal_ffi {
         fn signal_reset_handlers();
 
     }
+    extern "Rust" {
+        type SigChecker;
+        fn new_sighupint_checker() -> Box<SigChecker>;
+        fn check(&mut self) -> bool;
+    }
 }
 
 fn sig2wcs_ffi(sig: i32) -> UniquePtr<CxxWString> {
@@ -593,6 +598,10 @@ add_test!("test_signal_name", || {
     let sig = Signal::new(libc::SIGINT);
     assert_eq!(sig.name(), "SIGINT");
 });
+
+fn new_sighupint_checker() -> Box<SigChecker> {
+    Box::new(SigChecker::new_sighupint())
+}
 
 #[rustfmt::skip]
 add_test!("test_signal_parse", || {

@@ -1337,15 +1337,6 @@ double timef() {
 
 void exit_without_destructors(int code) { _exit(code); }
 
-extern "C" {
-[[gnu::noinline]] void debug_thread_error(void) {
-    // Wait for a SIGINT. We can't use sigsuspend() because the signal may be delivered on another
-    // thread.
-    sigchecker_t sigint(topic_t::sighupint);
-    sigint.wait();
-}
-}
-
 void save_term_foreground_process_group() { initial_fg_process_group = tcgetpgrp(STDIN_FILENO); }
 
 void restore_term_foreground_process_group_for_exit() {
@@ -1367,8 +1358,6 @@ void assert_is_locked(std::mutex &mutex, const char *who, const char *caller) {
     // actually locked; fortunately we are checking the opposite so we're safe.
     if (unlikely(mutex.try_lock())) {
         FLOGF(error, L"%s is not locked when it should be in '%s'", who, caller);
-        FLOG(error, L"Break on debug_thread_error to debug.");
-        debug_thread_error();
         mutex.unlock();
     }
 }

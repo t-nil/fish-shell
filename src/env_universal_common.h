@@ -19,6 +19,8 @@
 #include "env_universal_common.rs.h"
 #endif
 
+using universal_notifier_t = UniversalNotifierFFI;
+
 #if 0
 
 /// Callback data, reflecting a change in universal variables.

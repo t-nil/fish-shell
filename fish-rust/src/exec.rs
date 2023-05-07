@@ -1460,6 +1460,7 @@ fn exec_subshell_internal(
 mod exec_ffi {
     extern "C++" {
         include!("wutil.h");
+        include!("parser.h");
         type wcstring_list_ffi_t = crate::ffi::wcstring_list_ffi_t;
         type Parser = crate::parser::Parser;
     }

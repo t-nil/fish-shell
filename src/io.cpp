@@ -1,3 +1,4 @@
+#if 0
 // Utilities for io redirection.
 #include "config.h"  // IWYU pragma: keep
 
@@ -371,7 +372,7 @@ const wcstring &output_stream_t::contents() const { return g_empty_string; }
 
 int output_stream_t::flush_and_check_error() { return STATUS_CMD_OK; }
 
-fd_output_stream_t::fd_output_stream_t(int fd) : fd_(fd), sigcheck_(topic_t::sighupint) {
+fd_output_stream_t::fd_output_stream_t(int fd) : fd_(fd), sigcheck_(new_sighupint_checker()) {
     assert(fd_ >= 0 && "Invalid fd");
 }
 
@@ -382,7 +383,7 @@ bool fd_output_stream_t::append(const wchar_t *s, size_t amt) {
         // Some of our builtins emit multiple screens worth of data sent to a pager (the primary
         // example being the `history` builtin) and receiving SIGINT should be considered normal and
         // non-exceptional (user request to abort via Ctrl-C), meaning we shouldn't print an error.
-        if (errno == EINTR && sigcheck_.check()) {
+        if (errno == EINTR && sigcheck_->check()) {
             // We have two options here: we can either return false without setting errored_ to
             // true (*this* write will be silently aborted but the onus is on the caller to check
             // the return value and skip future calls to `append()`) or we can flag the entire
@@ -427,3 +428,4 @@ int buffered_output_stream_t::flush_and_check_error() {
     }
     return 0;
 }
+#endif

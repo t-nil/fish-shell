@@ -360,10 +360,34 @@ pub struct UniversalNotifierFFI(pub &'static dyn UniversalNotifier);
 mod env_universal_common_ffi {
     extern "Rust" {
         type UniversalNotifierFFI;
+        #[cxx_name = "default_notifier"]
         fn ffi_default_notifier() -> Box<UniversalNotifierFFI>;
+        fn poll(&self) -> bool;
+        fn post_notification(&self);
+        fn usec_delay_between_polls(&self) -> u64;
+        fn notification_fd(&self) -> i32;
+        fn notification_fd_became_readable(&self, fd: i32) -> bool;
     }
 }
 
 fn ffi_default_notifier() -> Box<UniversalNotifierFFI> {
     Box::new(UniversalNotifierFFI(default_notifier()))
+}
+
+impl UniversalNotifierFFI {
+    fn poll(&self) -> bool {
+        todo!()
+    }
+    fn post_notification(&self) {
+        todo!()
+    }
+    fn usec_delay_between_polls(&self) -> u64 {
+        todo!()
+    }
+    fn notification_fd(&self) -> RawFd {
+        todo!()
+    }
+    fn notification_fd_became_readable(&self, fd: RawFd) -> bool {
+        todo!()
+    }
 }

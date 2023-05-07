@@ -12,10 +12,11 @@
 #include <utility>
 #include <vector>
 
+struct Parser;
+
 #if INCLUDE_RUST_HEADERS
 #include "parser.rs.h"
 #else
-struct Parser;
 struct JobListFfi;
 #endif
 
@@ -498,7 +499,7 @@ struct parser_t : public std::enable_shared_from_this<parser_t> {
     RustFFIJobList ffi_jobs() const;
     library_data_pod_t *ffi_libdata_pod();
     job_t *ffi_job_get_from_pid(int pid) const;
-    const library_data_pod_t &ffi_libdata_pod_const() const;
+    const library_data_pod_t &ffi_libdata_pods_const() const;
 
     /// autocxx junk.
     bool ffi_has_funtion_block() const;

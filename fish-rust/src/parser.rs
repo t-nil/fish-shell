@@ -36,7 +36,7 @@ use crate::threads::assert_is_main_thread;
 use crate::util::get_time;
 use crate::wait_handle::WaitHandleStore;
 use crate::wchar::{wstr, WString, L};
-use crate::wchar_ffi::{AsWstr, WCharFromFFI};
+use crate::wchar_ffi::{AsWstr, WCharFromFFI, WCharToFFI};
 use crate::wutil::{perror, wgettext, wgettext_fmt};
 use cxx::{CxxVector, CxxWString, UniquePtr};
 use libc::{c_int, F_SEAL_FUTURE_WRITE};
@@ -1330,7 +1330,7 @@ mod parser_ffi {
         type Parser;
 
         fn assert_can_execute(&self);
-
+        fn is_interactive(&self) -> bool;
         #[cxx_name = "eval_with"]
         fn ffi_eval_with(
             &mut self,
@@ -1355,9 +1355,14 @@ mod parser_ffi {
         fn ffi_jobs(&self) -> Box<JobListFfi>;
         #[cxx_name = "libdata"]
         fn ffi_libdata(&self) -> &LibraryData;
-        // todo!
-        // #[cxx_name = "context"]
-        // fn ffi_context(&self) -> Box<OperationContext<'static>>;
+        #[cxx_name = "libdata_mut"]
+        fn ffi_libdata_mut(&self) -> &mut LibraryData;
+        #[cxx_name = "libdata_pods"]
+        fn ffi_libdata_pods(&self) -> &library_data_pod_t;
+        #[cxx_name = "libdata_pods_mut"]
+        fn ffi_libdata_pods_mut(&self) -> &mut library_data_pod_t;
+        #[cxx_name = "context"]
+        fn ffi_context(&self) -> *mut OperationContext<'static>;
         #[cxx_name = "vars"]
         fn ffi_vars(&self) -> &EnvStackRefFFI;
         fn sync_uvars_and_fire(&self, always: bool);
@@ -1374,15 +1379,35 @@ mod parser_ffi {
     extern "Rust" {
         #[cxx_name = "ParserRef"]
         type ParserRefFFI;
-        #[cxx_name = "vars"]
-        fn ffi_vars(&self) -> &EnvStackRefFFI;
-        fn deref(&self) -> &Parser;
+        fn vars(&self) -> &EnvStackRefFFI;
+        fn deref(&mut self) -> &mut Parser;
     }
 }
 
 impl LibraryData {
     fn exec_count(&self) -> u64 {
         self.pods.exec_count
+    }
+    fn current_filename() -> Option<FilenameRef> {
+        todo!()
+    }
+    fn transient_commandlines_empty(&self) -> bool {
+        self.transient_commandlines.is_empty()
+    }
+    fn transient_commandlines_back(&self) -> UniquePtr<CxxWString> {
+        self.transient_commandlines.last().unwrap().to_ffi()
+    }
+    fn transient_commandlines_push(&mut self, s: &CxxWString) {
+        self.transient_commandlines.push(s.from_ffi());
+    }
+    fn transient_commandlines_pop(&mut self, s: &CxxWString) {
+        self.transient_commandlines.pop();
+    }
+    fn cwd_fd() -> Option<Rc<AutoCloseFd>> {
+        todo!()
+    }
+    fn status_vars() -> StatusVars {
+        todo!()
     }
 }
 
@@ -1452,16 +1477,27 @@ impl Parser {
     fn ffi_libdata(&self) -> &LibraryData {
         unsafe { self.library_data.try_borrow_unguarded() }.unwrap()
     }
-    fn ffi_context(&self) -> Box<OperationContext<'static>> {
-        Box::new(self.context())
+    fn ffi_libdata_mut(&self) -> &mut LibraryData {
+        unsafe { &mut *self.library_data.as_ptr() }
+    }
+    fn ffi_libdata_pods(&self) -> &library_data_pod_t {
+        &unsafe { &*self.library_data.as_ptr() }.pods
+    }
+    fn ffi_libdata_pods_mut(&self) -> &mut library_data_pod_t {
+        &mut unsafe { &mut *self.library_data.as_ptr() }.pods
+    }
+    fn ffi_context(&self) -> *mut OperationContext<'static> {
+        Box::into_raw(Box::new(self.context()))
     }
 }
 
 impl ParserRefFFI {
-    fn deref(&self) -> &Parser {
-        &*self.0
+    fn deref(&mut self) -> &mut Parser {
+        let ptr = self.0.as_ref() as *const _;
+        let ptr = ptr as *mut _;
+        unsafe { &mut *ptr }
     }
-    fn ffi_vars(&self) -> &EnvStackRefFFI {
+    fn vars(&self) -> &EnvStackRefFFI {
         &self.0.variables_ffi
     }
 }

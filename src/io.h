@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "common.h"
+#include "cxx.h"
 #include "fds.h"
 #include "global_safety.h"
 #include "redirection.h"
@@ -23,10 +24,11 @@
 #else
 struct IoChain;
 struct IoStreams;
-using io_chain_tTODO = IoChain;
 #endif
 
 using std::shared_ptr;
+
+// todo! make io_streams_t wrap IoStreams
 
 struct job_group_t;
 
@@ -443,7 +445,7 @@ class fd_output_stream_t final : public output_stream_t {
     const int fd_;
 
     /// Used to check if a SIGINT has been received when EINTR is encountered
-    sigchecker_t sigcheck_;
+    rust::Box<SigChecker> sigcheck_;
 
     /// Whether we have received an error.
     bool errored_{false};

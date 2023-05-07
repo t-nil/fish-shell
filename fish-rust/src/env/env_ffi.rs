@@ -124,6 +124,7 @@ mod env_ffi {
         fn get(&self, name: &CxxWString) -> *mut EnvVar;
         fn getf(&self, name: &CxxWString, mode: u16) -> *mut EnvVar;
         fn get_unless_empty(&self, name: &CxxWString) -> *mut EnvVar;
+        fn getf_unless_empty(&self, name: &CxxWString, flags: u16) -> *mut EnvVar;
         fn get_names(&self, flags: u16, out: Pin<&mut wcstring_list_ffi_t>);
         fn is_principal(&self) -> bool;
         fn get_last_statuses(&self) -> Box<Statuses>;
@@ -291,6 +292,9 @@ impl EnvStackRefFFI {
     }
     fn get_unless_empty(&self, name: &CxxWString) -> *mut EnvVar {
         EnvironmentFFI::getf_unless_empty_ffi(self.0.as_ref(), name, 0)
+    }
+    fn getf_unless_empty(&self, name: &CxxWString, mode: u16) -> *mut EnvVar {
+        EnvironmentFFI::getf_unless_empty_ffi(self.0.as_ref(), name, mode)
     }
 
     fn get_names(&self, flags: u16, out: Pin<&mut wcstring_list_ffi_t>) {

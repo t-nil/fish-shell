@@ -158,7 +158,7 @@ std::vector<wcstring> path_get_paths(const wcstring &cmd, const environment_t &v
     auto path_var = vars.get(L"PATH");
     if (!path_var) return paths;
 
-    td::vector<wcstring> pathsv = path_var->as_list()->vals;
+    std::vector<wcstring> pathsv = path_var->as_list()->vals;
     for (auto path : pathsv) {
         if (path.empty()) continue;
         append_path_component(path, cmd);
@@ -349,14 +349,14 @@ static base_directory_t make_base_directory(const wcstring &xdg_var,
     // uvars are available.
     const auto &vars = env_stack_globals();
     base_directory_t result{};
-    const auto xdg_dir = vars.get_unless_empty(xdg_var, ENV_GLOBAL | ENV_EXPORT);
+    const auto xdg_dir = vars.getf_unless_empty(xdg_var, ENV_GLOBAL | ENV_EXPORT);
     if (xdg_dir) {
-        result.path = xdg_dir->as_string() + L"/fish";
+        result.path = *xdg_dir->as_string() + L"/fish";
         result.used_xdg = true;
     } else {
-        const auto home = vars.get_unless_empty(L"HOME", ENV_GLOBAL | ENV_EXPORT);
+        const auto home = vars.getf_unless_empty(L"HOME", ENV_GLOBAL | ENV_EXPORT);
         if (home) {
-            result.path = home->as_string() + non_xdg_homepath;
+            result.path = *home->as_string() + non_xdg_homepath;
         }
     }
 

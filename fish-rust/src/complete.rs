@@ -210,6 +210,7 @@ impl Default for Completion {
     }
 }
 
+#[derive(Default)]
 pub struct CompletionRequestOptions {
     /// Requesting autosuggestion
     pub autosuggestion: bool,
@@ -2548,16 +2549,19 @@ mod complete_ffi {
         ) -> Box<Completion>;
         fn completion(self: &Completion) -> UniquePtr<CxxWString>;
         fn description(self: &Completion) -> UniquePtr<CxxWString>;
+        fn flags(self: &Completion) -> u8;
         fn replaces_commandline(self: &Completion) -> bool;
         #[cxx_name = "clone"]
         fn clone_ffi(self: &Completion) -> Box<Completion>;
 
         fn new_completion_list() -> Box<CompletionListFfi>;
         fn size(self: &CompletionListFfi) -> usize;
+        fn empty(self: &CompletionListFfi) -> bool;
         fn at(self: &CompletionListFfi, i: usize) -> &Completion;
         fn complete_invalidate_path();
         fn reverse(self: &mut CompletionListFfi);
-        fn push(self: &mut CompletionListFfi, completion: &Completion);
+        fn push_back(self: &mut CompletionListFfi, completion: &Completion);
+        fn sort_and_prioritize(self: &mut CompletionListFfi);
     }
 }
 
@@ -2591,6 +2595,9 @@ impl Completion {
     fn description(&self) -> UniquePtr<CxxWString> {
         self.description.to_ffi()
     }
+    fn flags(&self) -> u8 {
+        self.flags.bits()
+    }
     fn clone_ffi(&self) -> Box<Completion> {
         Box::new(self.clone())
     }
@@ -2599,13 +2606,19 @@ impl CompletionListFfi {
     fn size(&self) -> usize {
         self.0.len()
     }
+    fn empty(&self) -> bool {
+        self.0.is_empty()
+    }
     fn at(&self, i: usize) -> &Completion {
         &self.0[i]
     }
     fn reverse(&mut self) {
         self.0.reverse();
     }
-    fn push(&mut self, completion: &Completion) {
+    fn push_back(&mut self, completion: &Completion) {
         self.0.push(completion.clone());
+    }
+    fn sort_and_prioritize(&mut self) {
+        sort_and_prioritize(&mut self.0, CompletionRequestOptions::default());
     }
 }

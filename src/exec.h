@@ -1,3 +1,7 @@
+#if INCLUDE_RUST_HEADERS
+#include "exec.rs.h"
+#endif
+
 #if 0
 // Prototypes for functions for executing a program.
 #ifndef FISH_EXEC_H

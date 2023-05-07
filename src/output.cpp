@@ -369,7 +369,7 @@ rgb_color_t parse_color(const env_var_t &var, bool is_background) {
 
     bool next_is_background = false;
     wcstring color_name;
-    for (const wcstring &next : var.as_list()) {
+    for (const wcstring &next : var.as_list()->vals) {
         color_name.clear();
         if (is_background) {
             if (color_name.empty() && next_is_background) {
@@ -434,7 +434,7 @@ void writembs_check(outputter_t &outp, const char *mbs, const char *mbs_name, bo
         const wchar_t *fmt =
             _(L"Tried to use terminfo string %s on line %ld of %s, which is "
               L"undefined in terminal of type \"%ls\". Please report this error to %s");
-        FLOG(error, fmt, mbs_name, line, file, term ? term->as_string().c_str() : L"",
+        FLOG(error, fmt, mbs_name, line, file, term ? term->as_string()->c_str() : L"",
              PACKAGE_BUGREPORT);
     }
 }
