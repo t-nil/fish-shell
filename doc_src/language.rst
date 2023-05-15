@@ -766,6 +766,8 @@ If the output is piped to :doc:`string split or string split0 <cmds/string-split
 
 The exit status of the last run command substitution is available in the :ref:`status <variables-status>` variable if the substitution happens in the context of a :doc:`set <cmds/set>` command (so ``if set -l (something)`` checks if ``something`` returned true).
 
+If a command substitution expands to nothing, it will cancel out any other strings attached to it (like :ref:`variable expansion <expand-variable>`). See the :ref:`Combining Lists <cartesian-product>` section for more information.
+
 To use only some lines of the output, refer to :ref:`slices <expand-slices>`.
 
 Examples::
